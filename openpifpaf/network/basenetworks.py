@@ -2,6 +2,8 @@ import logging
 import torch
 import torchvision.models
 
+from .hrnet import HighResolutionNet
+
 LOG = logging.getLogger(__name__)
 
 
@@ -170,3 +172,10 @@ class ShuffleNetV2K(torch.nn.Module):
         x = self.stage4(x)
         x = self.conv5(x)
         return x
+
+class HRNet(BaseNetwork):
+    def __init__(self, cfg_file, shortname, detection=False, is_train=False):
+        model = HighResolutionNet(cfg_file=cfg_file, detection=detection)
+        if is_train:
+            model.init_weights(model.cfg['MODEL']['PRETRAINED'])
+        super(HRNet, self).__init__(model, shortname, stride=model.stride(), out_features=model.stage4_cfg['NUM_CHANNELS'][0] if not detection else 512)

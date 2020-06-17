@@ -98,3 +98,64 @@ class CifDetHr(CifHr):
         # are properly suppressed.
         scalar_square_add_gauss_with_max(
             t, x, y, sigma, v / self.neighbors / len_cifs, truncate=1.0)
+
+class ButterflyHr(CifHr):
+    def fill_multiple(self, cifs, stride, min_scale=0.0):
+        start = time.perf_counter()
+
+        if self.accumulated is None:
+            shape = (
+                cifs[0].shape[0],
+                int((cifs[0].shape[2]) * stride),
+                int((cifs[0].shape[3]) * stride),
+            )
+            ta = np.zeros(shape, dtype=np.float32)
+            self.scales_n = np.zeros(shape, dtype=np.float32)
+            self.scales_w = np.zeros(shape, dtype="float32")
+            self.scales_h = np.zeros(shape, dtype="float32")
+            self.widths = np.zeros(shape, dtype="float32")
+            self.heights = np.zeros(shape, dtype="float32")
+            self.scalew_n = np.zeros(shape, dtype="float32")
+            self.scaleh_n = np.zeros(shape, dtype="float32")
+            self.width_n = np.zeros(shape, dtype="float32")
+            self.height_n = np.zeros(shape, dtype="float32")
+        else:
+            ta = np.zeros(self.accumulated.shape, dtype=np.float32)
+
+        for cif in cifs:
+            for t, p, scale_w, scale_h, width, height, n_sw, n_sh, n_w, n_h in zip(ta, cif, self.scales_w, self.scales_h, self.widths, self.heights, self.scalew_n, self.scaleh_n, self.width_n, self.height_n):
+                self.accumulate(len(cifs), t, scale_w, scale_h, width, height, n_sw, n_sh, n_w, n_h, p, stride, min_scale)
+        ta = np.tanh(ta)
+        if self.accumulated is None:
+            self.accumulated = ta
+        else:
+            self.accumulated = np.maximum(ta, self.accumulated)
+
+        LOG.debug('target_intensities %.3fs', time.perf_counter() - start)
+        return self
+    def accumulate(self, len_cifs, t, scale_w, scale_h, width, height, n_sw, n_sh, n_w, n_h, p, stride, min_scale):
+        p = p[:, p[0] > self.v_threshold]
+        if min_scale:
+            p = p[:, p[4] > min_scale / stride]
+            p = p[:, p[5] > min_scale / stride]
+
+        v, x, y, _, w, h, _ = p
+        x = x * stride
+        y = y * stride
+        w = np.exp(w)
+        h = np.exp(h)
+        sigma = np.maximum(1.0, 0.1 * np.minimum(w, h) * stride)
+        w = w * stride
+        h = h * stride
+        s_h = np.clip(h/5, a_min=2, a_max=None)
+        s_w = np.clip(w/5, a_min=2, a_max=None)
+        # Occupancy covers 2sigma.
+        # Restrict this accumulation to 1sigma so that seeds for the same joint
+        # are properly suppressed.
+        scalar_square_add_2dgauss_with_max(
+            t, x, y, s_w, s_h, (v / self.neighbors).astype(np.float32), truncate=0.5, max_value=100000.0)
+
+        cumulative_average_2d(scale_w, n_sw, x, y, s_w, s_h, (s_w), v)
+        cumulative_average_2d(scale_h, n_sh, x, y, s_w, s_h, (s_h), v)
+        cumulative_average_2d(width, n_w, x, y, s_w, s_h, w, v)
+        cumulative_average_2d(height, n_h, x, y, s_w, s_h, h, v)

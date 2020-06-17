@@ -219,9 +219,28 @@ def factory_from_scratch(basename, head_names, *, pretrained=True):
             [12, 24, 8], [32, 512, 1024, 2048, 2048],
         )
         return shufflenet_factory_from_scratch(basename, base_vision, 2048, head_metas)
+    if 'hrnet' in basename:
+        detection = False
+        if 'w32' in basename:
+            filename = 'w32_384x288_adam_lr1e-3.yaml'
+        elif 'w48' in basename:
+            filename = 'w48_384x288_adam_lr1e-3.yaml'
+        if 'det' in basename:
+            detection = True
+        return hrnet_factory_from_scratch(filename, head_metas, detection)
 
     raise Exception('unknown base network in {}'.format(basename))
 
+def hrnet_factory_from_scratch(filename, head_metas, detection=False):
+
+    basenet = basenetworks.HRNet(cfg_file=filename, shortname='HRNet', detection=detection, is_train=True)
+    #headnets = [heads.factory(h, basenet.out_features) for h in head_metas]
+    headnets = [heads.CompositeFieldFused(h, basenet.out_features) for h in head_metas]
+    
+    net_cpu = nets.Shell(basenet, headnets)
+    nets.model_defaults(net_cpu)
+    LOG.debug(net_cpu)
+    return net_cpu
 
 def generic_factory_from_scratch(basename, base_vision, out_features, head_metas):
     basenet = basenetworks.BaseNetwork(

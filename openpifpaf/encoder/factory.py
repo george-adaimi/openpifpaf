@@ -22,6 +22,11 @@ def cli(parser):
     group.add_argument('--caf-aspect-ratio', default=Caf.aspect_ratio, type=float,
                        help='CAF width relative to its length')
 
+    group = parser.add_argument_group('CIFDet encoder')
+    group.add_argument('--ignore-regions', default=CifDet.ignore_regions,action='store_true',
+                       help='Include Ignore regions around center fields')
+    group.add_argument('--full-fields', default=CifDet.full_fields,action='store_true',
+                       help='Use all fields around center')
 
 def configure(args):
     # configure CIF
@@ -32,6 +37,9 @@ def configure(args):
     Caf.fixed_size = args.caf_fixed_size
     Caf.aspect_ratio = args.caf_aspect_ratio
 
+    # configure CIFDet
+    CifDet.ignore_regions = args.ignore_regions
+    CifDet.full_fields = args.full_fields
 
 def factory(headnets, basenet_stride):
     return [factory_head(head_net, basenet_stride) for head_net in headnets]
@@ -47,9 +55,10 @@ def factory_head(head_net: network.heads.CompositeField, basenet_stride):
         vis = visualizer.CifDet(meta.name,
                                 stride=stride,
                                 categories=meta.categories)
+
         return CifDet(n_categories,
                       AnnRescalerDet(stride, n_categories),
-                      visualizer=vis)
+                      visualizer=vis, ignore_regions=CifDet.ignore_regions, full_fields=CifDet.full_fields)
 
     if isinstance(meta, network.heads.IntensityMeta):
         LOG.info('selected encoder CIF for %s', meta.name)

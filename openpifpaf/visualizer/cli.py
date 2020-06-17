@@ -20,6 +20,8 @@ def cli(parser):
     group.add_argument('--debug-indices', default=[], nargs='+',
                        help=('indices of fields to create debug plots for '
                              'of the form headname:fieldindex, e.g. cif:5'))
+    group.add_argument('--fig-file', default=None, type=str,
+                       help='Location to save debug figures')
 
 
 def enable_all_plots():
@@ -50,6 +52,7 @@ def configure(args):
     CifDet.show_confidences = args.debug_cifdet_c
     CifDet.show_regressions = args.debug_cifdet_v
     CifHr.show = args.debug_cifhr
+    CifDet.fig_file = args.fig_file
 
     if args.debug_images:
         enable_all_plots()

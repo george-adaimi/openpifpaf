@@ -1,4 +1,6 @@
 import logging
+import os
+import numpy as np
 
 from .base import BaseVisualizer
 from ..annotation import AnnotationDet
@@ -12,6 +14,7 @@ class CifDet(BaseVisualizer):
     show_confidences = False
     show_regressions = False
     show_background = False
+    fig_file = None
 
     def __init__(self, head_name, *, stride=1, categories=None):
         super().__init__(head_name)
@@ -45,8 +48,8 @@ class CifDet(BaseVisualizer):
 
         for f in self.indices:
             LOG.debug('%s', self.categories[f])
-
-            with self.image_canvas(self._processed_image) as ax:
+            fig_file = os.path.join(self.fig_file, self._meta['file_name'].replace(".jpg", ".c_"+str(f)+".jpg")) if self.fig_file else None
+            with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
                 im = ax.imshow(self.scale_scalar(confidences[f], self.stride),
                                alpha=0.9, vmin=0.0, vmax=1.0, cmap='Greens')
                 self.colorbar(ax, im)
@@ -59,8 +62,8 @@ class CifDet(BaseVisualizer):
         for f in self.indices:
             LOG.debug('%s', self.categories[f])
             confidence_field = confidence_fields[f] if confidence_fields is not None else None
-
-            with self.image_canvas(self._processed_image) as ax:
+            fig_file = os.path.join(self.fig_file, self._meta['file_name'].replace(".jpg", ".reg_"+str(f)+".jpg")) if self.fig_file else None
+            with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
                 show.white_screen(ax, alpha=0.5)
                 if annotations:
                     self.detection_painter.annotations(ax, annotations, color='gray')

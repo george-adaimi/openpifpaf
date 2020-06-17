@@ -34,7 +34,7 @@ class CifSeeds:
             c, x, y, _, s = p
 
             start_sv = time.perf_counter()
-            v = scalar_values(self.cifhr[field_i], x * stride, y * stride, default=0.0)
+            v = scalar_values(self.cifhr.accumulated[field_i], x * stride, y * stride, default=0.0)
             v = 0.9 * v + 0.1 * c
             sv += time.perf_counter() - start_sv
 
@@ -76,12 +76,39 @@ class CifDetSeeds(CifSeeds):
                 p = p[:, p[4] > min_scale / stride]
                 p = p[:, p[5] > min_scale / stride]
             c, x, y, _, w, h, _ = p
-            v = scalar_values(self.cifhr[field_i], x * stride, y * stride, default=0.0)
+            v = scalar_values(self.cifhr.accumulated[field_i], x * stride, y * stride, default=0.0)
             v = 0.9 * v + 0.1 * c
             if self.score_scale != 1.0:
                 v = v * self.score_scale
             m = v > self.threshold
             x, y, v, w, h = x[m] * stride, y[m] * stride, v[m], w[m] * stride, h[m] * stride
+
+            for vv, xx, yy, ww, hh in zip(v, x, y, w, h):
+                self.seeds.append((vv, field_i, xx, yy, ww, hh))
+
+        LOG.debug('seeds %d, %.3fs', len(self.seeds), time.perf_counter() - start)
+        return self
+
+class ButterflySeeds(CifSeeds):
+    def fill_cif(self, cif, stride, *, min_scale=0.0, seed_mask=None):
+        start = time.perf_counter()
+
+        for field_i, p in enumerate(cif):
+            if seed_mask is not None and not seed_mask[field_i]:
+                continue
+            p = p[:, p[0] > self.threshold/2.0]
+            if min_scale:
+                p = p[:, p[4] > min_scale / stride]
+                p = p[:, p[5] > min_scale / stride]
+            c, x, y, _, w, h, _ = p
+            v = scalar_values(self.cifhr.accumulated[field_i], x * stride, y * stride, default=0.0)
+            w = scalar_values(self.cifhr.widths[field_i], x * stride, y * stride)
+            h = scalar_values(self.cifhr.heights[field_i], x * stride, y * stride)
+            v = 0.9 * v + 0.1 * c
+            if self.score_scale != 1.0:
+                v = v * self.score_scale
+            m = v > self.threshold
+            x, y, v, w, h = x[m] * stride, y[m] * stride, v[m], w[m], h[m]
 
             for vv, xx, yy, ww, hh in zip(v, x, y, w, h):
                 self.seeds.append((vv, field_i, xx, yy, ww, hh))

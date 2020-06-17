@@ -32,7 +32,7 @@ class CifDet(Generator):
                 vis.predicted(fields[cif_i])
 
         cifhr = CifDetHr(self.field_config).fill(fields)
-        seeds = CifDetSeeds(cifhr.accumulated, self.field_config).fill(fields)
+        seeds = CifDetSeeds(cifhr, self.field_config).fill(fields)
         occupied = Occupancy(cifhr.accumulated.shape, 2, min_scale=2.0)
 
         annotations = []

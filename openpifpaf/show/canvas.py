@@ -51,7 +51,6 @@ def image_canvas(image, fig_file=None, show=True, dpi_factor=1.0, fig_width=10.0
     ax.imshow(image)
 
     yield ax
-
     if fig_file:
         fig.savefig(fig_file, dpi=image.shape[1] / kwargs['figsize'][0] * dpi_factor)
     if show:

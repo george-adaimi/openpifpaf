@@ -24,6 +24,7 @@ class BaseVisualizer:
     common_ax = None
     _image = None
     _processed_image = None
+    _meta = None
 
     def __init__(self, head_name):
         self.head_name = head_name
@@ -40,7 +41,7 @@ class BaseVisualizer:
         BaseVisualizer._image = np.asarray(image)
 
     @staticmethod
-    def processed_image(image):
+    def processed_image(image, meta=None):
         if image is None:
             BaseVisualizer._processed_image = None
             return
@@ -48,6 +49,7 @@ class BaseVisualizer:
         image = np.moveaxis(np.asarray(image), 0, -1)
         image = np.clip(image * 0.25 + 0.5, 0.0, 1.0)
         BaseVisualizer._processed_image = image
+        BaseVisualizer._meta = meta
 
     @staticmethod
     def reset():
