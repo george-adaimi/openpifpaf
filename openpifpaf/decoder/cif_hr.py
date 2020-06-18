@@ -4,7 +4,7 @@ import time
 import numpy as np
 
 # pylint: disable=import-error
-from ..functional import scalar_square_add_gauss_with_max
+from ..functional import scalar_square_add_gauss_with_max, scalar_square_add_2dgauss_with_max, cumulative_average_2d
 from .field_config import FieldConfig
 from .. import visualizer
 
@@ -142,8 +142,8 @@ class ButterflyHr(CifHr):
         v, x, y, _, w, h, _ = p
         x = x * stride
         y = y * stride
-        w = np.exp(w)
-        h = np.exp(h)
+        #w = np.exp(w)
+        #h = np.exp(h)
         sigma = np.maximum(1.0, 0.1 * np.minimum(w, h) * stride)
         w = w * stride
         h = h * stride

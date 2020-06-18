@@ -5,8 +5,8 @@ import time
 from .generator import Generator
 from ...annotation import AnnotationDet
 from ..field_config import FieldConfig
-from ..cif_hr import CifDetHr
-from ..cif_seeds import CifDetSeeds
+from ..cif_hr import CifDetHr, ButterflyHr
+from ..cif_seeds import CifDetSeeds, ButterflySeeds
 from .. import nms
 from ..occupancy import Occupancy
 from ... import visualizer
@@ -31,8 +31,10 @@ class CifDet(Generator):
             for vis, cif_i in zip(self.field_config.cif_visualizers, self.field_config.cif_indices):
                 vis.predicted(fields[cif_i])
 
-        cifhr = CifDetHr(self.field_config).fill(fields)
-        seeds = CifDetSeeds(cifhr, self.field_config).fill(fields)
+        # cifhr = CifDetHr(self.field_config).fill(fields)
+        # seeds = CifDetSeeds(cifhr, self.field_config).fill(fields)
+        cifhr = ButterflyHr(self.field_config).fill(fields)
+        seeds = ButterflySeeds(cifhr, self.field_config).fill(fields)
         occupied = Occupancy(cifhr.accumulated.shape, 2, min_scale=2.0)
 
         annotations = []

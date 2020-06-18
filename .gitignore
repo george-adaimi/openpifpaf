@@ -50,3 +50,4 @@ data
 outputs
 pretrained
 coco_debug
+visdrone_debug
