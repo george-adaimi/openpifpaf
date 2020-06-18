@@ -497,7 +497,7 @@ def train_nightowls_factory(args, target_transforms):
 
     if args.loader_workers is None:
         args.loader_workers = args.batch_size
-        
+
     train_data = dataset(
         root=args.nightowls_train_image_dir,
         annFile=args.nightowls_train_annotations,
