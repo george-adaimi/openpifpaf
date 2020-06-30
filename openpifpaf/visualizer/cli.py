@@ -1,5 +1,6 @@
 from .base import BaseVisualizer
 from .caf import Caf
+from .raf import Raf
 from .cif import Cif
 from .cifdet import CifDet
 from .cifhr import CifHr
@@ -34,6 +35,9 @@ def enable_all_plots():
     CifDet.show_background = True
     CifDet.show_confidences = True
     CifDet.show_regressions = True
+    Raf.show_background = True
+    Raf.show_confidences = True
+    Raf.show_regressions = True
     CifHr.show = True
     Occupancy.show = True
     Seeds.show = True
@@ -51,8 +55,11 @@ def configure(args):
     Cif.show_regressions = args.debug_cif_v
     CifDet.show_confidences = args.debug_cifdet_c
     CifDet.show_regressions = args.debug_cifdet_v
+    Raf.show_confidences = args.debug_cifdet_c
+    Raf.show_regressions = args.debug_cifdet_v
     CifHr.show = args.debug_cifhr
     CifDet.fig_file = args.fig_file
+    Raf.fig_file = args.fig_file
 
     if args.debug_images:
         enable_all_plots()

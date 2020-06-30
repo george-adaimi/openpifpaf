@@ -33,7 +33,7 @@ class CifDet(BaseVisualizer):
         ]
 
         self._confidences(field[0])
-        self._regressions(field[1], field[2], annotations=annotations)
+        self._regressions(field[1], field[2], confidence_fields=field[0], annotations=annotations)
 
     def predicted(self, field, *, annotations=None):
         self._confidences(field[:, 0])
@@ -46,9 +46,13 @@ class CifDet(BaseVisualizer):
         if not self.show_confidences:
             return
 
-        for f in self.indices:
+        indices = np.arange(confidences.shape[0])[np.nanmax(confidences, axis=(1,2))>0.1]
+        for f in indices:
             LOG.debug('%s', self.categories[f])
-            fig_file = os.path.join(self.fig_file, self._meta['file_name'].replace(".jpg", ".c_"+str(f)+".jpg")) if self.fig_file else None
+            if self._meta:
+                fig_file = os.path.join(self.fig_file, self._meta['file_name'].replace(".jpg", ".c_"+str(f)+".jpg")).replace(".png", ".c_"+str(f)+".png") if self.fig_file else None
+            else:
+                fig_file = os.path.join(self.fig_file, "prediction_image.cifdet_c_"+str(f)+".jpg").replace(".png", ".c_"+str(f)+".png") if self.fig_file else None
             with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
                 im = ax.imshow(self.scale_scalar(confidences[f], self.stride),
                                alpha=0.9, vmin=0.0, vmax=1.0, cmap='Greens')
@@ -59,10 +63,14 @@ class CifDet(BaseVisualizer):
         if not self.show_regressions:
             return
 
-        for f in self.indices:
+        indices = np.arange(confidence_fields.shape[0])[np.nanmax(confidence_fields, axis=(1,2))>0.1]
+        for f in indices:
             LOG.debug('%s', self.categories[f])
             confidence_field = confidence_fields[f] if confidence_fields is not None else None
-            fig_file = os.path.join(self.fig_file, self._meta['file_name'].replace(".jpg", ".reg_"+str(f)+".jpg")) if self.fig_file else None
+            if self._meta:
+                fig_file = os.path.join(self.fig_file, self._meta['file_name'].replace(".jpg", ".reg_"+str(f)+".jpg")).replace(".png", ".reg_"+str(f)+".png") if self.fig_file else None
+            else:
+                fig_file = os.path.join(self.fig_file, "prediction_image.cifdet_reg_"+str(f)+".jpg").replace(".png", ".reg_"+str(f)+".png") if self.fig_file else None
             with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
                 show.white_screen(ax, alpha=0.5)
                 if annotations:

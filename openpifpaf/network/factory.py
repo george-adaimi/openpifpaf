@@ -109,7 +109,7 @@ def factory(
 
     cif_indices = [0]
     caf_indices = [1]
-    if not any(isinstance(h.meta, heads.AssociationMeta) for h in net_cpu.head_nets):
+    if not any(isinstance(h.meta, heads.AssociationMeta) or isinstance(h.meta, heads.RelationMeta) for h in net_cpu.head_nets):
         caf_indices = []
     if dense_connections and not multi_scale:
         caf_indices = [1, 2]
@@ -117,7 +117,10 @@ def factory(
         cif_indices = [v * 3 + 1 for v in range(10)]
         caf_indices = [v * 3 + 2 for v in range(10)]
     if isinstance(net_cpu.head_nets[0].meta, heads.DetectionMeta):
-        net_cpu.process_heads = heads.CifdetCollector(cif_indices)
+        if len(net_cpu.head_nets)>1 and isinstance(net_cpu.head_nets[1].meta, heads.RelationMeta):
+            net_cpu.process_heads = heads.CifCafCollector(cif_indices, caf_indices)
+        else:
+            net_cpu.process_heads = heads.CifdetCollector(cif_indices)
     else:
         net_cpu.process_heads = heads.CifCafCollector(cif_indices, caf_indices)
     net_cpu.cross_talk = cross_talk
@@ -236,7 +239,7 @@ def hrnet_factory_from_scratch(filename, head_metas, detection=False):
     basenet = basenetworks.HRNet(cfg_file=filename, shortname='HRNet', detection=detection, is_train=True)
     #headnets = [heads.factory(h, basenet.out_features) for h in head_metas]
     headnets = [heads.CompositeFieldFused(h, basenet.out_features) for h in head_metas]
-    
+
     net_cpu = nets.Shell(basenet, headnets)
     nets.model_defaults(net_cpu)
     LOG.debug(net_cpu)

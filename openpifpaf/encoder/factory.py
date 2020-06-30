@@ -4,6 +4,7 @@ from .annrescaler import AnnRescaler, AnnRescalerDet
 from .caf import Caf
 from .cif import Cif
 from .cifdet import CifDet
+from .raf import Raf
 from .. import network, visualizer
 
 LOG = logging.getLogger(__name__)
@@ -67,6 +68,20 @@ def factory_head(head_net: network.heads.CompositeField, basenet_stride):
                              keypoints=meta.keypoints, skeleton=meta.draw_skeleton)
         return Cif(AnnRescaler(stride, len(meta.keypoints), meta.pose),
                    sigmas=meta.sigmas,
+                   visualizer=vis)
+    if isinstance(meta, network.heads.RelationMeta):
+        LOG.info('selected encoder RAF for %s', meta.name)
+        n_categories = len(meta.rel_categories)
+        vis = None
+        vis = visualizer.Raf(meta.name,
+                             stride=stride,
+                             obj_categories=meta.obj_categories,
+                             rel_categories=meta.rel_categories)
+        return Raf(n_categories,
+                   AnnRescalerDet(stride, n_categories),
+                   stride=stride,
+                   sigmas=meta.sigmas,
+                   only_in_field_of_view=meta.only_in_field_of_view,
                    visualizer=vis)
 
     if isinstance(meta, network.heads.AssociationMeta):

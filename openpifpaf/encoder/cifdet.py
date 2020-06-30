@@ -81,6 +81,29 @@ class CifDetGenerator(object):
             wh = bbox[2:]
             self.fill_fn(category_id - 1, xy, wh)
 
+    @staticmethod
+    def quadrant(xys):
+        q = np.zeros((xys.shape[0],), dtype=np.int)
+        q[xys[:, 0] < 0.0] += 1
+        q[xys[:, 1] < 0.0] += 2
+        return q
+
+    @classmethod
+    def max_r(cls, xyv, other_xyv):
+        out = np.array([np.inf, np.inf, np.inf, np.inf], dtype=np.float32)
+        if not other_xyv:
+            return out
+
+        other_xyv = np.asarray(other_xyv)
+        diffs = other_xyv[:, :2] - np.expand_dims(xyv[:2], 0)
+        qs = cls.quadrant(diffs)
+        for q in range(4):
+            if not np.any(qs == q):
+                continue
+            out[q] = np.min(np.linalg.norm(diffs[qs == q], axis=1))
+
+        return out
+
     def fill_detection(self, f, xy, wh):
         ij = np.round(xy - self.s_offset).astype(np.int) + self.config.padding
         minx, miny = int(ij[0]), int(ij[1])

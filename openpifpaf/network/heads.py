@@ -87,7 +87,6 @@ class CifCafCollector(torch.nn.Module):
 
         return cif_head, caf_head
 
-
 class CifdetCollector(torch.nn.Module):
     def __init__(self, indices):
         super(CifdetCollector, self).__init__()
@@ -249,6 +248,21 @@ class AssociationMeta:
     def n_fields(self):
         return len(self.skeleton)
 
+@dataclass
+class RelationMeta:
+    name: str
+    obj_categories: List[str]
+    rel_categories: List[str]
+    sigmas: List[float] = None
+    only_in_field_of_view: bool = False
+
+    n_confidences: int = 1
+    n_vectors: int = 2
+    n_scales: int = 2
+
+    @property
+    def n_fields(self):
+        return len(self.rel_categories)
 
 @dataclass
 class DetectionMeta:
@@ -396,12 +410,24 @@ class CompositeFieldFused(torch.nn.Module):
         # dequad
         self.dequad_op = torch.nn.PixelShuffle(2)
 
+        self.init_weights()
+
     @property
     def sparse_task_parameters(self):
         return [self.conv.weight]
 
     def stride(self, basenet_stride):
         return basenet_stride // (2 ** self._quad)
+
+    def init_weights(self, pi_focal=0.01):
+        import numpy as np
+        m = list(self.conv.modules())[-1]
+        if isinstance(m, torch.nn.Conv2d):
+            # nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            torch.nn.init.normal_(m.weight, std=0.01)
+            for name, _ in m.named_parameters():
+                if name in ['bias']:
+                    torch.nn.init.constant_(m.bias, -np.log((1-pi_focal)/pi_focal))
 
     def forward(self, x):  # pylint: disable=arguments-differ
         x = self.dropout(x)

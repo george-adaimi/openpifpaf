@@ -95,7 +95,7 @@ class DetectionPainter:
         ax.annotate(
             text,
             (x, y),
-            fontsize=8,
+            fontsize=14,
             xytext=(5.0, 5.0),
             textcoords='offset points',
             color='white', bbox={'facecolor': color, 'alpha': 0.5, 'linewidth': 0},

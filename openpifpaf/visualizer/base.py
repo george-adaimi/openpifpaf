@@ -41,9 +41,18 @@ class BaseVisualizer:
         BaseVisualizer._image = np.asarray(image)
 
     @staticmethod
+    def meta(meta):
+        if image is None:
+            BaseVisualizer._meta = None
+            return
+
+        BaseVisualizer._meta = meta
+
+    @staticmethod
     def processed_image(image, meta=None):
         if image is None:
             BaseVisualizer._processed_image = None
+            BaseVisualizer._meta = meta
             return
 
         image = np.moveaxis(np.asarray(image), 0, -1)
