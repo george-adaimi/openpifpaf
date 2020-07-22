@@ -46,7 +46,7 @@ class AnnRescaler(object):
         keypoint_sets[:, :, :2] /= self.stride
         return keypoint_sets
 
-    def bg_mask(self, anns, width_height):
+    def bg_mask(self, anns, width_height, *, crowd_margin):
         """Create background mask taking crowd annotations into account."""
         mask = np.ones((
             (width_height[1] - 1) // self.stride + 1,
@@ -62,10 +62,19 @@ class AnnRescaler(object):
                 bb = ann['bbox'].copy()
                 bb /= self.stride
                 bb[2:] += bb[:2]  # convert width and height to x2 and y2
-                left = np.clip(int(bb[0]), 0, mask.shape[1] - 1)
-                top = np.clip(int(bb[1]), 0, mask.shape[0] - 1)
-                right = np.clip(int(np.ceil(bb[2])), left + 1, mask.shape[1])
-                bottom = np.clip(int(np.ceil(bb[3])), top + 1, mask.shape[0])
+
+                # left top
+                left = np.clip(int(bb[0] - crowd_margin), 0, mask.shape[1] - 1)
+                top = np.clip(int(bb[1] - crowd_margin), 0, mask.shape[0] - 1)
+
+                # right bottom
+                # ceil: to round up
+                # +1: because mask upper limit is exclusive
+                right = np.clip(int(np.ceil(bb[2] + crowd_margin)) + 1,
+                                left + 1, mask.shape[1])
+                bottom = np.clip(int(np.ceil(bb[3] + crowd_margin)) + 1,
+                                 top + 1, mask.shape[0])
+
                 mask[top:bottom, left:right] = 0
                 continue
 
@@ -143,7 +152,7 @@ class AnnRescalerDet(object):
         #                   for k, ann in dict_temp.items() if (ann['object_index'] in dict_temp and (not (ann['iscrowd'] or dict_temp[ann['object_index']]['iscrowd'])))]
         return dict_temp
 
-    def bg_mask(self, anns, width_height):
+    def bg_mask(self, anns, width_height, *, crowd_margin):
         """Create background mask taking crowd annotations into account."""
         mask = np.ones((
             self.n_categories,
@@ -159,10 +168,12 @@ class AnnRescalerDet(object):
                 bb = ann['bbox'].copy()
                 bb /= self.stride
                 bb[2:] += bb[:2]  # convert width and height to x2 and y2
-                left = np.clip(int(bb[0]), 0, mask.shape[1] - 1)
-                top = np.clip(int(bb[1]), 0, mask.shape[0] - 1)
-                right = np.clip(int(np.ceil(bb[2])), left + 1, mask.shape[1])
-                bottom = np.clip(int(np.ceil(bb[3])), top + 1, mask.shape[0])
+                left = np.clip(int(bb[0] - crowd_margin), 0, mask.shape[1] - 1)
+                top = np.clip(int(bb[1] - crowd_margin), 0, mask.shape[0] - 1)
+                right = np.clip(int(np.ceil(bb[2] + crowd_margin)) + 1,
+                                left + 1, mask.shape[1])
+                bottom = np.clip(int(np.ceil(bb[3] + crowd_margin)) + 1,
+                                 top + 1, mask.shape[0])
                 mask[field_i, top:bottom, left:right] = 0
                 continue
 

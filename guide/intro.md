@@ -55,6 +55,8 @@ and make sure there is no folder named `openpifpaf` in your current directory.
 pip3 install openpifpaf
 ```
 
+You need to install `matplotlib` to produce visual outputs.
+
 For a live demo, we recommend to try the
 [openpifpafwebdemo](https://github.com/vita-epfl/openpifpafwebdemo) project.
 Alternatively, `openpifpaf.video` (requires OpenCV) provides a live demo as well.
@@ -131,3 +133,9 @@ Reference: {cite}`kreiss2019pifpaf`
 
 ```{bibliography} references.bib
 ```
+
+
+## Commercial License
+
+This software is available for licensing via the EPFL Technology Transfer
+Office (https://tto.epfl.ch/, info.tto@epfl.ch).

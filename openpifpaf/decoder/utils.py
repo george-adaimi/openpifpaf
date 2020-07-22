@@ -34,7 +34,7 @@ def normalize_butterfly(joint_intensity_fields, joint_fields, joint_fields_b, wi
         (joint_intensity_fields, joint_fields, width_fields, height_fields),
         axis=1,
     ), joint_fields_b
-    
+
 def sparse_bilinear_kernel(coord, value):
     l = coord.astype(int)
     g = np.meshgrid(*((ll, ll + 1) for ll in l))
