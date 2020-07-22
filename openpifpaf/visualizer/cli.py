@@ -60,6 +60,7 @@ def configure(args):
     CifHr.show = args.debug_cifhr
     CifDet.fig_file = args.fig_file
     Raf.fig_file = args.fig_file
+    Occupancy.fig_file = args.fig_file
 
     if args.debug_images:
         enable_all_plots()

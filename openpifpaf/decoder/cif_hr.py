@@ -147,8 +147,8 @@ class ButterflyHr(CifHr):
         sigma = np.maximum(1.0, 0.1 * np.minimum(w, h) * stride)
         w = w * stride
         h = h * stride
-        s_h = np.clip(h/5, a_min=2, a_max=None)
-        s_w = np.clip(w/5, a_min=2, a_max=None)
+        s_h = np.clip(h/10, a_min=2, a_max=None)
+        s_w = np.clip(w/10, a_min=2, a_max=None)
         # Occupancy covers 2sigma.
         # Restrict this accumulation to 1sigma so that seeds for the same joint
         # are properly suppressed.

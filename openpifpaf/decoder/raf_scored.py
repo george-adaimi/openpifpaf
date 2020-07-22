@@ -10,7 +10,7 @@ from .field_config import FieldConfig
 LOG = logging.getLogger(__name__)
 
 class RafScored:
-    default_score_th = 0.1
+    default_score_th = 0.2
 
     def __init__(self, cifhr, config: FieldConfig, *, score_th=None, cif_floor=0.1):
         self.cifhr = cifhr
@@ -34,10 +34,8 @@ class RafScored:
             self.forward = [np.empty((9, 0), dtype=raf.dtype) for _ in raf]
             self.backward = [np.empty((9, 0), dtype=raf.dtype) for _ in raf]
 
-        import pdb; pdb.set_trace()
         for raf_i, nine in enumerate(raf):
             assert nine.shape[0] == 9
-            import pdb; pdb.set_trace()
             mask = nine[0] > self.score_th
             if not np.any(mask):
                 continue
@@ -56,7 +54,6 @@ class RafScored:
             nine = np.copy(nine)
             nine[(1, 2, 3, 4, 5, 6, 7, 8), :] *= stride
             scores = nine[0]
-
             cifhr_values = scalar_values_3d(self.cifhr, nine[1], nine[2], default=0.0)
             cifhr_s = np.max(cifhr_values, axis=0)
             index_s = np.amax(cifhr_values, axis=0)
@@ -64,7 +61,6 @@ class RafScored:
             mask_s = scores_s > self.score_th
             d9_s = np.copy(nine[:, mask_s][(0, 5, 6, 7, 8, 1, 2, 3, 4), :])
             d9_s[0] = scores_s[mask_s]
-            import pdb; pdb.set_trace()
             self.backward[raf_i] = np.concatenate((self.backward[raf_i], d9_s), axis=1)
 
             cifhr_values = scalar_values_3d(self.cifhr, nine[5], nine[6], default=0.0)
@@ -75,6 +71,7 @@ class RafScored:
             d9_o = np.copy(nine[:, mask_o])
             d9_o[0] = scores_o[mask_o]
             self.forward[raf_i] = np.concatenate((self.forward[raf_i], d9_o), axis=1)
+
         import pdb; pdb.set_trace()
         LOG.debug('scored caf (%d, %d) in %.3fs',
                   sum(f.shape[1] for f in self.forward),

@@ -335,7 +335,8 @@ def preprocess_factory(
         preprocess += [transforms.RescaleAbsolute(long_edge)]
 
     if tight_padding:
-        preprocess += [transforms.CenterPadTight(16)]
+        #preprocess += [transforms.CenterPadTight(16)]
+        preprocess += [transforms.CenterPadTight(32)]
     else:
         assert long_edge
         preprocess += [transforms.CenterPad(long_edge)]
@@ -439,7 +440,7 @@ def main():
     # processor.instance_scorer.write_data('instance_score_data.json')
 
     # model stats
-    count_ops = list(evalwrapper.count_ops(model_cpu))
+    count_ops = list(evalwrapper.count_ops(model_cpu, 512, 512))
     local_checkpoint = network.local_checkpoint_path(args.checkpoint)
     file_size = os.path.getsize(local_checkpoint) if local_checkpoint else -1.0
 

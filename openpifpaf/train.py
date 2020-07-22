@@ -19,6 +19,7 @@ def default_output_file(args, net_cpu):
 
     now = datetime.datetime.now().strftime('%y%m%d-%H%M%S')
     out = 'outputs/{}-{}-{}'.format(base_name, now, '-'.join(head_names))
+    out += '-{}'.format(args.dataset)
     if args.square_edge != 385:
         out += '-edge{}'.format(args.square_edge)
     if args.regression_loss != 'laplace':
@@ -65,6 +66,8 @@ def cli():
                         help='update batch norm running statistics')
     parser.add_argument('--ema', default=1e-2, type=float,
                         help='ema decay constant')
+    parser.add_argument('--log-interval', default=10, type=int,
+                        help='log loss every n steps')
     parser.add_argument('--disable-cuda', action='store_true',
                         help='disable CUDA')
 
@@ -104,7 +107,9 @@ def main():
     net_cpu.process_heads = None
     if args.output is None:
         args.output = default_output_file(args, net_cpu)
-    logs.configure(args)
+
+    log_level = logs.configure(args)
+    LOG.setLevel(log_level)
     if args.log_stats:
         logging.getLogger('openpifpaf.stats').setLevel(logging.DEBUG)
 
@@ -127,6 +132,7 @@ def main():
         fix_batch_norm=not args.update_batchnorm_runningstatistics,
         stride_apply=args.stride_apply,
         ema_decay=args.ema,
+        log_interval=args.log_interval,
         train_profile=args.profile,
         model_meta_data={
             'args': vars(args),

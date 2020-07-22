@@ -4,6 +4,8 @@ import logging
 import numpy as np
 import torch.utils.data
 import torchvision
+from collections import defaultdict
+
 from PIL import Image
 from .. import transforms, utils
 
@@ -178,7 +180,7 @@ class UAVDT(torch.utils.data.Dataset):
             fileName = fileName.split("/")
             folder = fileName[-2]
             image_numb = int(fileName[-1][3:9])
-            dict_folder[folder].append(",".join(list(map(str,[image_numb, -1, x, y, w, h, s, 1, categ-1]))))
+            dict_folder[folder].append(",".join(list(map(str,[image_numb, -1, x, y, w, h, annotation['score'], 1, categ-1]))))
 
         for folder in dict_folder.keys():
             utils.mkdir_if_missing(path)

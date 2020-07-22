@@ -52,7 +52,6 @@ class CifDetRaf(Generator):
             initial_annotations = []
         LOG.debug('initial annotations = %d', len(initial_annotations))
 
-        import pdb; pdb.set_trace()
         if self.field_config.cif_visualizers:
             for vis, cif_i in zip(self.field_config.cif_visualizers, self.field_config.cif_indices):
                 vis.predicted(fields[cif_i])
@@ -63,9 +62,8 @@ class CifDetRaf(Generator):
         cifhr = CifDetHr(self.field_config).fill(fields)
         seeds = CifDetSeeds(cifhr, self.field_config).fill(fields)
 
-        import pdb; pdb.set_trace()
         raf_scored = RafScored(cifhr.accumulated, self.field_config).fill(fields)
-
+        import pdb; pdb.set_trace()
         occupied = Occupancy(cifhr.accumulated.shape, 2, min_scale=4)
         annotations = []
 

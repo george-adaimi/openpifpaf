@@ -135,53 +135,57 @@ def factory_decode(head_nets, *,
 
     if isinstance(head_nets[0].meta, network.heads.DetectionMeta):
         field_config = FieldConfig()
-        if multi_scale:
-            if not dense_connections:
-                field_config.cif_indices = [v * 3 for v in range(5)]
-                field_config.caf_indices = [v * 3 + 1 for v in range(5)]
-            else:
-                field_config.cif_indices = [v * 2 for v in range(5)]
-                field_config.caf_indices = [v * 2 + 1 for v in range(5)]
-            field_config.cif_strides = [head_nets[i].stride(basenet_stride)
-                                        for i in field_config.cif_indices]
-            field_config.caf_strides = [head_nets[i].stride(basenet_stride)
-                                        for i in field_config.caf_indices]
-            field_config.cif_min_scales = [0.0, 12.0, 16.0, 24.0, 40.0]
-            field_config.caf_min_distances = [v * 3.0 for v in field_config.cif_min_scales]
-            field_config.caf_max_distances = [160.0, 240.0, 320.0, 480.0, None]
-        if multi_scale and multi_scale_hflip:
-            if not dense_connections:
-                field_config.cif_indices = [v * 3 for v in range(10)]
-                field_config.caf_indices = [v * 3 + 1 for v in range(10)]
-            else:
-                field_config.cif_indices = [v * 2 for v in range(10)]
-                field_config.caf_indices = [v * 2 + 1 for v in range(10)]
-            field_config.cif_strides = [head_nets[i].stride(basenet_stride)
-                                        for i in field_config.cif_indices]
-            field_config.caf_strides = [head_nets[i].stride(basenet_stride)
-                                        for i in field_config.caf_indices]
-            field_config.cif_min_scales *= 2
-            field_config.caf_min_distances *= 2
-            field_config.caf_max_distances *= 2
-
         field_config.cif_visualizers = [visualizer.CifDet(head_nets[0].meta.name,
                                   stride=head_nets[0].stride(basenet_stride),
                                   categories=head_nets[0].meta.categories)]
-        field_config.caf_visualizers = [
-            visualizer.Raf(head_nets[i].meta.name,
-                                 stride=head_nets[i].stride(basenet_stride),
-                                 obj_categories=head_nets[i].meta.obj_categories,
-                                 rel_categories=head_nets[i].meta.rel_categories)
-            for i in field_config.caf_indices
-        ]
-
-
+        field_config.cif_strides = [head_nets[i].stride(basenet_stride)
+                                    for i in field_config.cif_indices]
         if len(head_nets)>1 and isinstance(head_nets[1].meta, network.heads.RelationMeta):
+            if multi_scale:
+                if not dense_connections:
+                    field_config.cif_indices = [v * 3 for v in range(5)]
+                    field_config.caf_indices = [v * 3 + 1 for v in range(5)]
+                else:
+                    field_config.cif_indices = [v * 2 for v in range(5)]
+                    field_config.caf_indices = [v * 2 + 1 for v in range(5)]
+                field_config.cif_strides = [head_nets[i].stride(basenet_stride)
+                                            for i in field_config.cif_indices]
+                field_config.caf_strides = [head_nets[i].stride(basenet_stride)
+                                            for i in field_config.caf_indices]
+                field_config.cif_min_scales = [0.0, 12.0, 16.0, 24.0, 40.0]
+                field_config.caf_min_distances = [v * 3.0 for v in field_config.cif_min_scales]
+                field_config.caf_max_distances = [160.0, 240.0, 320.0, 480.0, None]
+            if multi_scale and multi_scale_hflip:
+                if not dense_connections:
+                    field_config.cif_indices = [v * 3 for v in range(10)]
+                    field_config.caf_indices = [v * 3 + 1 for v in range(10)]
+                else:
+                    field_config.cif_indices = [v * 2 for v in range(10)]
+                    field_config.caf_indices = [v * 2 + 1 for v in range(10)]
+                field_config.cif_strides = [head_nets[i].stride(basenet_stride)
+                                            for i in field_config.cif_indices]
+                field_config.caf_strides = [head_nets[i].stride(basenet_stride)
+                                            for i in field_config.caf_indices]
+                field_config.cif_min_scales *= 2
+                field_config.caf_min_distances *= 2
+                field_config.caf_max_distances *= 2
+
+
+
+            field_config.caf_visualizers = [
+                visualizer.Raf(head_nets[i].meta.name,
+                                     stride=head_nets[i].stride(basenet_stride),
+                                     obj_categories=head_nets[i].meta.obj_categories,
+                                     rel_categories=head_nets[i].meta.rel_categories)
+                for i in field_config.caf_indices
+            ]
+
             return CifDetRaf(
                 field_config,
                 head_nets[1].meta.obj_categories,
                 worker_pool=worker_pool,
             )
+
         return CifDet(
             field_config,
             head_nets[0].meta.categories,
