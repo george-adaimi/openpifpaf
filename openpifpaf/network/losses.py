@@ -520,7 +520,7 @@ class CompositeLoss(torch.nn.Module):
             bce_weight[bce_target == 0] *= self.background_weight
             ce_loss = ce_loss * bce_weight
 
-        ce_loss = ce_loss.sum() / (1000*batch_size)
+        ce_loss = ce_loss.sum() / (batch_size) #(1000*batch_size)
         return ce_loss
 
     def _localization_loss(self, x_regs, x_logbs, target_regs):
@@ -539,7 +539,7 @@ class CompositeLoss(torch.nn.Module):
                 torch.masked_select(x_logbs[:, :, i], reg_masks),
                 torch.masked_select(target_reg[:, :, 0], reg_masks),
                 torch.masked_select(target_reg[:, :, 1], reg_masks),
-            ).sum() /(100*batch_size))
+            ).sum() /(batch_size))#(100*batch_size))
 
         return reg_losses
 
@@ -575,7 +575,7 @@ class CompositeLoss(torch.nn.Module):
                 torch.masked_select(target_reg[:, :, 3], reg_masks),
                 torch.masked_select(target_reg[:, :, 4], reg_masks),
                 torch.masked_select(target_reg[:, :, 5], reg_masks),
-            ) / (100.0 * batch_size))
+            ) / (batch_size)) #(100.0 * batch_size))
         return margin_losses
 
     def forward(self, *args):
@@ -626,6 +626,9 @@ def cli(parser):
                        help='[experimental]')
     group.add_argument('--auto-tune-mtl', default=False, action='store_true',
                        help='use Kendall\'s prescription for adjusting the multitask weight')
+
+    group.add_argument('--auto-tune-mtl-old', default=False, action='store_true',
+                       help='use old Kendall\'s prescription for adjusting the multitask weight')
     group.add_argument('--auto-tune-mtl-variance', default=False, action='store_true',
                        help='use Variance prescription for adjusting the multitask weight')
     assert MultiHeadLoss.task_sparsity_weight == MultiHeadLossAutoTuneKendall.task_sparsity_weight
@@ -657,6 +660,7 @@ def factory_from_args(args, head_nets):
         reg_loss_name=args.regression_loss,
         device=args.device,
         auto_tune_mtl=args.auto_tune_mtl,
+        auto_tune_mtl_old=args.auto_tune_mtl_old,
         auto_tune_mtl_variance=args.auto_tune_mtl_variance,
     )
 
@@ -664,7 +668,7 @@ def factory_from_args(args, head_nets):
 # pylint: disable=too-many-branches
 def factory(head_nets, lambdas, *,
             reg_loss_name=None, device=None,
-            auto_tune_mtl=False, auto_tune_mtl_variance=False):
+            auto_tune_mtl=False, auto_tune_mtl_old=False, auto_tune_mtl_variance=False):
     if isinstance(head_nets[0], (list, tuple)):
         return [factory(hn, lam,
                         reg_loss_name=reg_loss_name,
@@ -696,8 +700,9 @@ def factory(head_nets, lambdas, *,
 
     losses = [CompositeLoss(head_net, reg_loss) for head_net in head_nets]
     if auto_tune_mtl:
-        # loss = MultiHeadLossAutoTuneKendall(losses, lambdas,
-        #                                     sparse_task_parameters=sparse_task_parameters)
+        loss = MultiHeadLossAutoTuneKendall(losses, lambdas,
+                                            sparse_task_parameters=sparse_task_parameters)
+    elif auto_tune_mtl_old:
         loss = MultiHeadLossAutoTuneOld(losses, lambdas,
                                             sparse_task_parameters=sparse_task_parameters)
     elif auto_tune_mtl_variance:

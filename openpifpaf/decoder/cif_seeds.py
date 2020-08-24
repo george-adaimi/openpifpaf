@@ -89,6 +89,25 @@ class CifDetSeeds(CifSeeds):
         LOG.debug('seeds %d, %.3fs', len(self.seeds), time.perf_counter() - start)
         return self
 
+class FullButterfly(CifSeeds):
+
+    def fill_cif(self, cif, stride, *, min_scale=0.0, seed_mask=None):
+        start = time.perf_counter()
+
+        for field_i, p in enumerate(cif):
+            p = p[:, p[0] > self.threshold]
+            if min_scale:
+                p = p[:, p[4] > min_scale / stride]
+                p = p[:, p[5] > min_scale / stride]
+            c, x, y, _, w, h, _ = p
+            x, y, v, w, h = x* stride, y * stride, c, w*stride, h*stride
+
+            for vv, xx, yy, ww, hh in zip(v, x, y, w, h):
+                self.seeds.append((vv, field_i, xx, yy, ww, hh))
+
+        LOG.debug('seeds %d, %.3fs', len(self.seeds), time.perf_counter() - start)
+        return self
+
 class ButterflySeeds(CifSeeds):
     def fill_cif(self, cif, stride, *, min_scale=0.0, seed_mask=None):
         start = time.perf_counter()

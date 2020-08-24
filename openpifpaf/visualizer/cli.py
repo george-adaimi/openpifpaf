@@ -59,6 +59,8 @@ def configure(args):
     Raf.show_regressions = args.debug_cifdet_v
     CifHr.show = args.debug_cifhr
     CifDet.fig_file = args.fig_file
+    Cif.fig_file = args.fig_file
+    Caf.fig_file = args.fig_file
     Raf.fig_file = args.fig_file
     Occupancy.fig_file = args.fig_file
 

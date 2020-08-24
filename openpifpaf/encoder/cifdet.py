@@ -194,10 +194,12 @@ class CifDetGenerator(object):
            miny + 2 < 0 or maxy - 2 > self.intensities.shape[1]:
             return
 
+        offset = xy - (ij + self.s_offset - self.config.padding)
         if wh[0] > 16 or wh[1]>16:
             sigma_ignore, sigma_eff = 0.5, 0.2
             w_ignore, h_ignore = np.round(sigma_ignore*wh[0] + 0.5).astype(np.int), np.round(sigma_ignore*wh[1]+ 0.5).astype(np.int)
             xy_offset = [(w_ignore - 1.0) / 2.0, (h_ignore - 1.0) / 2.0]
+            ij = np.round(xy - xy_offset).astype(np.int) + self.config.padding
             if wh[0]>16:
                 minx_ignore = int(ij[0])
             else:
@@ -221,7 +223,6 @@ class CifDetGenerator(object):
         miny = miny_n
         maxy = maxy_n
 
-        offset = xy - (ij + self.s_offset - self.config.padding)
         offset = offset.reshape(2, 1, 1)
 
         # mask

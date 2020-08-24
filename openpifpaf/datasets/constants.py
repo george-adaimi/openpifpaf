@@ -7,6 +7,27 @@ COCO_PERSON_SKELETON = [
     (2, 4), (3, 5), (4, 6), (5, 7),
 ]
 
+BBOX_SKELETON = [
+    [1,5], [2,5], [3,5], [4,5]
+]
+
+DENSER_BBOX_SKELETON = [
+    [1, 2], [2, 3], [3, 4], [4, 1], [1,5], [2,5], [3,5], [4,5]
+]
+
+DENSER_BBOX_CONNECTIONS = [
+    c
+    for c in DENSER_BBOX_SKELETON
+    if c not in BBOX_SKELETON
+]
+
+BBOX_SIGMAS = [
+    0.1,  # top_left
+    0.1,  # top_right
+    0.1,  # bottom_right
+    0.1,  # bottom_left
+    0.1,  # center
+]
 
 KINEMATIC_TREE_SKELETON = [
     (1, 2), (2, 4),  # left head
@@ -48,6 +69,13 @@ BBOX_KEYPOINTS = [
     'center',       # 5
 ]
 
+BBOX_UPRIGHT_POSE = np.array([
+    [-1.0, -1.0, 2.0],# 'nose',            # 1
+    [-1, 1, 2.0],  # 'left_eye',        # 2
+    [1, 1, 2.0],  # 'right_eye',       # 3
+    [1, -1, 2.0],  # 'left_ear',        # 4
+    [0.0, 0.0, 2.0],  # 'right_ear',       # 5
+])
 
 COCO_UPRIGHT_POSE = np.array([
     [0.0, 9.3, 2.0],  # 'nose',            # 1
@@ -256,6 +284,19 @@ COCO_CATEGORIES = [
     'hair brush',
 ]
 
+COCO_BBOX_KEYPOINTS = []
+COCO_BBOX_UPRIGHT_POSE = []
+for element in np.asarray(COCO_CATEGORIES)[[0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 12, 13, 14, 15, 16, 17,18, 19, 20, 21, 22, 23, 24, 26, 27, 30, 31, 32, 33, 34, 35, 36, 37,38, 39, 40, 41, 42, 43, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55,56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 69, 71, 72, 73, 74, 75, 76,77, 78, 79, 80, 81, 83, 84, 85, 86, 87, 88, 89]]:
+    COCO_BBOX_KEYPOINTS.append(element+'_tl')
+    COCO_BBOX_KEYPOINTS.append(element+'_cntr')
+    COCO_BBOX_UPRIGHT_POSE.append([-1.0, -1.0, 2.0])
+    COCO_BBOX_UPRIGHT_POSE.append([0, 0, 2.0])
+COCO_BBOX_UPRIGHT_POSE = np.asarray(COCO_BBOX_UPRIGHT_POSE)
+COCO_BBOX_SIGMAS = [0.1]*len(COCO_BBOX_KEYPOINTS)
+
+COCO_BBOX_SKELETON =[
+    (index*2, index*2-1) for index in range(1, (len(COCO_BBOX_KEYPOINTS)//2)+1)
+]
 
 def draw_ann(ann, *, keypoint_painter, filename=None, margin=0.5, aspect=None, **kwargs):
     from .. import show  # pylint: disable=import-outside-toplevel
@@ -303,6 +344,26 @@ def draw_skeletons(pose):
     ann.set(pose, np.array(COCO_PERSON_SIGMAS) * scale)
     draw_ann(ann, filename='docs/skeleton_dense.png', keypoint_painter=keypoint_painter)
 
+def draw_skeletons_bbox(pose):
+    from ..annotation import Annotation  # pylint: disable=import-outside-toplevel
+    from .. import show  # pylint: disable=import-outside-toplevel
+
+    scale = np.sqrt(
+        (np.max(pose[:, 0]) - np.min(pose[:, 0]))
+        * (np.max(pose[:, 1]) - np.min(pose[:, 1]))
+    )
+
+    show.KeypointPainter.show_joint_scales = True
+    keypoint_painter = show.KeypointPainter(color_connections=True, linewidth=6)
+
+    ann = Annotation(keypoints=BBOX_KEYPOINTS, skeleton=BBOX_SKELETON)
+    ann.set(pose, np.array(BBOX_SIGMAS) * scale)
+    draw_ann(ann, filename='docs/skeleton_bbox.png', keypoint_painter=keypoint_painter)
+
+
+    ann = Annotation(keypoints=BBOX_KEYPOINTS, skeleton=DENSER_BBOX_SKELETON)
+    ann.set(pose, np.array(BBOX_SIGMAS) * scale)
+    draw_ann(ann, filename='docs/skeleton_bbox_dense.png', keypoint_painter=keypoint_painter)
 
 def print_associations():
     for j1, j2 in COCO_PERSON_SKELETON:
@@ -316,4 +377,5 @@ if __name__ == '__main__':
     # rotate = np.array(((c, -s), (s, c)))
     # rotated_pose = np.copy(COCO_DAVINCI_POSE)
     # rotated_pose[:, :2] = np.einsum('ij,kj->ki', rotate, rotated_pose[:, :2])
-    draw_skeletons(COCO_UPRIGHT_POSE)
+    #draw_skeletons(COCO_UPRIGHT_POSE)
+    draw_skeletons_bbox(BBOX_UPRIGHT_POSE)

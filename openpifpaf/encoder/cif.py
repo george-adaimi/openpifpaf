@@ -52,7 +52,7 @@ class CifGenerator(object):
         self.fill(keypoint_sets)
         fields = self.fields(valid_area)
 
-        self.config.visualizer.processed_image(image)
+        self.config.visualizer.processed_image(image, meta)
         self.config.visualizer.targets(fields, annotation_dicts=anns)
 
         return fields

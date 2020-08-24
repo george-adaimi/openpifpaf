@@ -1,13 +1,14 @@
 import torch
 
 from .coco import Coco
+from .coco_cifcafdet import Coco as Coco_cifcaf
 from .visdrone import VisDrone
 from .uavdt import UAVDT
 from .eurocity import EuroCity
 from .nightowls import NightOwls
 from .visual_relationship import VisualRelationship
 from .collate import collate_images_targets_meta
-from .constants import COCO_KEYPOINTS, HFLIP, BBOX_KEYPOINTS, BBOX_HFLIP
+from .constants import COCO_KEYPOINTS, HFLIP, BBOX_KEYPOINTS, BBOX_HFLIP, COCO_CATEGORIES, COCO_BBOX_KEYPOINTS
 from .. import transforms
 
 COCOKP_ANNOTATIONS_TRAIN = 'data/mscoco/annotations/person_keypoints_train2017.json'
@@ -47,6 +48,7 @@ dataset_list = {
     'visdrone': VisDrone,
     'cocokp': Coco,
     'cocodet': Coco,
+    'coco_cifcaf': Coco_cifcaf,
     'eurocity': EuroCity,
     'nightowls': NightOwls,
     'visual_relationship': VisualRelationship,
@@ -113,7 +115,7 @@ def train_cli(parser):
 
 def train_configure(args):
     if args.dataset in ('cocokp', 'cocodet'):
-        dataset_meta['categories'] = COCO_KEYPOINTS
+        dataset_meta['categories'] = COCO_CATEGORIES
         return
     dataset_meta['categories'] = dataset_list[args.dataset].categories
     if args.dataset in ('visual_relationship'):
@@ -160,6 +162,47 @@ def train_cocokp_preprocess_factory(
         transforms.TRAIN_TRANSFORM,
     ])
 
+def train_cococifcaf_preprocess_factory(
+        *,
+        square_edge,
+        augmentation=True,
+        extended_scale=False,
+        orientation_invariant=0.0,
+        rescale_images=1.0,
+        keypoints=COCO_KEYPOINTS,
+        hflip=HFLIP
+):
+    if not augmentation:
+        return transforms.Compose([
+            transforms.NormalizeAnnotations(),
+            transforms.RescaleAbsolute(square_edge),
+            transforms.CenterPad(square_edge),
+            transforms.EVAL_TRANSFORM,
+        ])
+
+    if extended_scale:
+        rescale_t = transforms.RescaleRelative(
+            scale_range=(0.25 * rescale_images, 2.0 * rescale_images),
+            power_law=True)
+    else:
+        rescale_t = transforms.RescaleRelative(
+            scale_range=(0.4 * rescale_images, 2.0 * rescale_images),
+            power_law=True)
+
+    orientation_t = None
+    if orientation_invariant:
+        orientation_t = transforms.RandomApply(transforms.RotateBy90(), orientation_invariant)
+
+    return transforms.Compose([
+        transforms.NormalizeAnnotations(),
+        transforms.AnnotationJitter(),
+        #transforms.RandomApply(transforms.HFlip(keypoints, hflip), 0.5),
+        rescale_t,
+        transforms.Crop(square_edge, use_area_of_interest=True),
+        transforms.CenterPad(square_edge),
+        orientation_t,
+        transforms.TRAIN_TRANSFORM,
+    ])
 
 def train_cocodet_preprocess_factory(
         *,
@@ -264,7 +307,7 @@ def train_cocokp_factory(args, target_transforms):
 
     train_data = Coco(
         image_dir=args.coco_train_image_dir,
-        ann_file=args.cocokp_train_annotations,
+        ann_file=args.cocodet_train_annotations,
         preprocess=preprocess,
         target_transforms=target_transforms,
         n_images=args.n_images,
@@ -281,7 +324,7 @@ def train_cocokp_factory(args, target_transforms):
 
     val_data = Coco(
         image_dir=args.coco_val_image_dir,
-        ann_file=args.cocokp_val_annotations,
+        ann_file=args.cocodet_val_annotations,
         preprocess=preprocess,
         target_transforms=target_transforms,
         n_images=args.n_images,
@@ -298,6 +341,60 @@ def train_cocokp_factory(args, target_transforms):
 
     return train_loader, val_loader
 
+def train_cococifcaf_factory(args, target_transforms):
+    dataset = dataset_list['coco_cifcaf']
+
+    preprocess = train_cococifcaf_preprocess_factory(
+        square_edge=args.square_edge,
+        augmentation=args.augmentation,
+        extended_scale=args.extended_scale,
+        orientation_invariant=args.orientation_invariant,
+        rescale_images=args.rescale_images,
+        keypoints=COCO_BBOX_KEYPOINTS,
+        hflip=BBOX_HFLIP)
+
+    if args.loader_workers is None:
+        args.loader_workers = args.batch_size
+
+    train_data = dataset(
+        image_dir=args.coco_train_image_dir,
+        ann_file=args.cocodet_train_annotations,
+        preprocess=preprocess,
+        target_transforms=target_transforms,
+        n_images=args.n_images,
+        image_filter='annotated',
+        category_ids=[],
+    )
+    if args.duplicate_data:
+        train_data = torch.utils.data.ConcatDataset(
+            [train_data for _ in range(args.duplicate_data)])
+    train_loader = torch.utils.data.DataLoader(
+        train_data, batch_size=args.batch_size, shuffle=False,
+        sampler=torch.utils.data.WeightedRandomSampler(
+            train_data.class_aware_sample_weights(), len(train_data), replacement=True),
+        pin_memory=args.pin_memory, num_workers=args.loader_workers, drop_last=True,
+        collate_fn=collate_images_targets_meta)
+
+    val_data = Coco(
+        image_dir=args.coco_val_image_dir,
+        ann_file=args.cocodet_val_annotations,
+        preprocess=preprocess,
+        target_transforms=target_transforms,
+        n_images=args.n_images,
+        image_filter='annotated',
+        category_ids=[],
+    )
+    if args.duplicate_data:
+        val_data = torch.utils.data.ConcatDataset(
+            [val_data for _ in range(args.duplicate_data)])
+    val_loader = torch.utils.data.DataLoader(
+        val_data, batch_size=args.batch_size, shuffle=False,
+        sampler=torch.utils.data.WeightedRandomSampler(
+            val_data.class_aware_sample_weights(), len(val_data), replacement=True),
+        pin_memory=args.pin_memory, num_workers=args.loader_workers, drop_last=True,
+        collate_fn=collate_images_targets_meta)
+
+    return train_loader, val_loader
 
 def train_cocodet_factory(args, target_transforms):
     preprocess = train_cocodet_preprocess_factory(
@@ -602,6 +699,8 @@ def train_factory(args, target_transforms):
         return train_cocokp_factory(args, target_transforms)
     if args.dataset in ('cocodet',):
         return train_cocodet_factory(args, target_transforms)
+    if args.dataset in ('coco_cifcaf',):
+        return train_cococifcaf_factory(args, target_transforms)
     if args.dataset in ('eurocity',):
         return train_eurocity_factory(args, target_transforms)
     if args.dataset in ('uavdt',):

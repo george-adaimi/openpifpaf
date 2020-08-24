@@ -32,6 +32,33 @@ class Shell(torch.nn.Module):
 
         return head_outputs
 
+# class Shell_featureAgg(torch.nn.Module):
+#     def __init__(self, base_net, head_nets, *,
+#                  process_heads=None, cross_talk=0.0):
+#         super(Shell, self).__init__()
+#
+#         self.base_net = base_net
+#         self.head_nets = torch.nn.ModuleList(head_nets)
+#         self.process_heads = process_heads
+#         self.cross_talk = cross_talk
+#
+#     def forward(self, *args):
+#         image_batch = args[0]
+#
+#         if self.training and self.cross_talk:
+#             rolled_images = torch.cat((image_batch[-1:], image_batch[:-1]))
+#             image_batch += rolled_images * self.cross_talk
+#
+#         x = self.base_net(image_batch)
+#         output_tocombine = self.conv1(x)
+#         conf, delta_xy, feature_toCombine = output_tocombine[0], output_tocombine[1:3], output_tocombine[4:]
+#         x =
+#         head_outputs = [hn(x) for hn in self.head_nets]
+#
+#         if self.process_heads is not None:
+#             head_outputs = self.process_heads(head_outputs)
+#
+#         return head_outputs
 
 class Shell2Scale(torch.nn.Module):
     def __init__(self, base_net, head_nets, *, reduced_stride=3):
