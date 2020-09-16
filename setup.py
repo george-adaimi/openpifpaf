@@ -13,7 +13,7 @@ except ImportError:
 import versioneer
 
 
-class NumpyIncludePath(object):
+class NumpyIncludePath():
     """Lazy import of numpy to get include path."""
     @staticmethod
     def __str__():
@@ -73,7 +73,7 @@ setup(
     extras_require={
         'dev': [
             'flameprof',
-            'jupyter-book>=0.7.0b',
+            'jupyter-book>=0.7.4',
             'matplotlib',
             'nbdime',
             'nbstripout',

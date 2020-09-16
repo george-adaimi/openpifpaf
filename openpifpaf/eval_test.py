@@ -15,7 +15,7 @@ import torch
 
 from .annotation import Annotation, AnnotationDet
 from . import datasets, decoder, network, show, transforms, visualizer, __version__
-
+from .VisDrone2018_DET_toolkit_py import evalDet
 import sys
 LOG = logging.getLogger(__name__)
 
@@ -288,6 +288,8 @@ def write_evaluations(dataset, evalwrapper, filename, args, total_time, count_op
           ''.format(evalwrapper.nn_time, 1000 * evalwrapper.nn_time / n_images))
     print('total time = {:.1f}s ({:.0f}ms / image)'
           ''.format(total_time, 1000 * total_time / n_images))
+    #import pdb; pdb.set_trace()
+    evalDet.evalDet(args.output)
 
 def default_output_name(args):
     output = ('{}.eval'+args.dataset+'-{}edge{}').format(

@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import numpy as np
@@ -5,6 +6,12 @@ import numpy as np
 from .base import BaseVisualizer
 from ..annotation import AnnotationDet
 from .. import show
+
+try:
+    import matplotlib.cm
+    CMAP_GREENS_NAN = copy.copy(matplotlib.cm.get_cmap('Greens')).set_bad('white', alpha=0.5)
+except ImportError:
+    CMAP_GREENS_NAN = None
 
 LOG = logging.getLogger(__name__)
 
@@ -55,14 +62,14 @@ class CifDet(BaseVisualizer):
                 fig_file = os.path.join(self.fig_file, "prediction_image.cifdet_c_"+str(f)+".jpg").replace(".png", ".cifdet_c_"+str(f)+".png") if self.fig_file else None
             with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
                 im = ax.imshow(self.scale_scalar(confidences[f], self.stride),
-                               alpha=0.9, vmin=0.0, vmax=1.0, cmap='Greens')
+                               alpha=0.9, vmin=0.0, vmax=1.0, cmap=CMAP_GREENS_NAN)
                 self.colorbar(ax, im)
 
     def _regressions(self, regression_fields, wh_fields, *,
                      annotations=None, confidence_fields=None, uv_is_offset=True):
         if not self.show_regressions:
             return
-
+        import pdb;pdb.set_trace()
         indices = np.arange(confidence_fields.shape[0])[np.nanmax(confidence_fields, axis=(1,2))>0.3]
         for f in indices:
             LOG.debug('%s', self.categories[f])

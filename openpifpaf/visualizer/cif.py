@@ -1,3 +1,4 @@
+import copy
 import logging
 import numpy as np
 import os
@@ -5,6 +6,12 @@ import os
 from .base import BaseVisualizer
 from ..annotation import Annotation
 from .. import show
+
+try:
+    import matplotlib.cm
+    CMAP_ORANGES_NAN = copy.copy(matplotlib.cm.get_cmap('Oranges')).set_bad('white', alpha=0.5)
+except ImportError:
+    CMAP_ORANGES_NAN = None
 
 LOG = logging.getLogger(__name__)
 
@@ -59,7 +66,7 @@ class Cif(BaseVisualizer):
             with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
                 ax.text(0, 0, '{}'.format(self.keypoints[f]), fontsize=8, color='red')
                 im = ax.imshow(self.scale_scalar(confidences[f], self.stride),
-                               alpha=0.9, vmin=0.0, vmax=1.0, cmap='Oranges')
+                               alpha=0.9, vmin=0.0, vmax=1.0, cmap=CMAP_ORANGES_NAN)
                 self.colorbar(ax, im)
 
     def _regressions(self, regression_fields, scale_fields, *,

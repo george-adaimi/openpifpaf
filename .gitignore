@@ -52,3 +52,5 @@ pretrained
 coco_debug
 visdrone_debug
 visualrelation_debug
+PRED/
+VisDrone2018_DET_toolkit_py

@@ -9,38 +9,93 @@ LOG = logging.getLogger(__name__)
 
 
 class Bce(torch.nn.Module):
+    def __init__(self, *, focal_gamma=0.0, detach_focal=False):
+        super().__init__()
+        self.focal_gamma = focal_gamma
+        self.detach_focal = detach_focal
+
     def forward(self, x, t):  # pylint: disable=arguments-differ
-        # print(torch.min(x).item(), torch.max(x).item())
-        x = x.clamp(-5.0, 5.0)
+        t_zeroone = t.clone()
+        t_zeroone[t_zeroone > 0.0] = 1.0
+        # x = torch.clamp(x, -20.0, 20.0)
         bce = torch.nn.functional.binary_cross_entropy_with_logits(
-            x,
-            t,
-            reduction='none',
-        )
+            x, t_zeroone, reduction='none')
+        bce = torch.clamp(bce, 0.02, 5.0)  # 0.02 -> -3.9, 0.01 -> -4.6, 0.001 -> -7, 0.0001 -> -9
+
+        if self.focal_gamma != 0.0:
+            pt = torch.exp(-bce)
+            focal = (1.0 - pt)**self.focal_gamma
+            if self.detach_focal:
+                focal = focal.detach()
+            bce = focal * bce
+
+        weight_mask = t_zeroone != t
+        bce[weight_mask] = bce[weight_mask] * t[weight_mask]
+
         return bce
 
-
-class Log1pL1Tuned(torch.nn.Module):
+class FocalLoss(torch.nn.Module):
+    '''nn.Module warpper for focal loss'''
     def __init__(self):
+        super(FocalLoss, self).__init__()
+
+    def forward(self, out, target):
+        return self._neg_loss(out, target)
+
+    def _sigmoid(self, x):
+        y = torch.clamp(x.sigmoid_(), min=1e-4, max=1-1e-4)
+        return y
+    def _neg_loss(self, pred, gt):
+        ''' Modified focal loss. Exactly the same as CornerNet.
+          Runs faster and costs a little bit more memory
+          Arguments:
+            pred (batch x c x h x w)
+            gt_regr (batch x c x h x w)
+        '''
+        pred = self._sigmoid(pred)
+        pos_inds = gt.eq(1).float()
+        neg_inds = gt.lt(1).float()
+
+        neg_weights = torch.pow(1 - gt, 4)
+
+        loss = 0
+
+        pos_loss = torch.log(pred) * torch.pow(1 - pred, 2) * pos_inds
+        neg_loss = torch.log(1 - pred) * torch.pow(pred, 2) * neg_weights * neg_inds
+
+        num_pos  = pos_inds.float().sum()
+        pos_loss = pos_loss.sum()
+        neg_loss = neg_loss.sum()
+
+        if num_pos == 0:
+            loss = loss - neg_loss
+        else:
+            loss = loss - (pos_loss + neg_loss) / num_pos
+        return loss
+
+class ScaleLoss(torch.nn.Module):
+    def __init__(self, b, *, low_clip=0.0, relative=False):
         super().__init__()
-        self.logb = torch.nn.Parameter(torch.zeros((1,), dtype=torch.float64))
+        self.b = b
+        self.low_clip = low_clip
+        self.relative = relative
 
     def forward(self, logs, t):  # pylint: disable=arguments-differ
         loss = torch.nn.functional.l1_loss(
-            torch.log1p(torch.exp(logs)),
-            torch.log1p(t),
+            torch.exp(logs),
+            t,
             reduction='none',
         )
-        loss = loss.clamp_max(5.0)
+        loss = torch.clamp(loss, self.low_clip, 5.0)
 
-        # constrain range of logb
-        self.logb.data.clamp_min_(-3.0)
+        loss = loss / self.b
+        if self.relative:
+            loss = loss / (1.0 + t)
 
-        # ln(2) = 0.694
-        return self.logb + (loss + 0.1) * torch.exp(-self.logb)
+        return loss
 
 
-def laplace_loss(x1, x2, logb, t1, t2, weight=None):
+def laplace_loss(x1, x2, logb, t1, t2, *, weight=None, norm_low_clip=0.0):
     """Loss based on Laplace Distribution.
 
     Loss for a single two-dimensional vector (x1, x2) with radial
@@ -51,10 +106,13 @@ def laplace_loss(x1, x2, logb, t1, t2, weight=None):
     # https://github.com/pytorch/pytorch/issues/2421
     # norm = torch.sqrt((x1 - t1)**2 + (x2 - t2)**2)
     norm = (torch.stack((x1, x2)) - torch.stack((t1, t2))).norm(dim=0)
-    norm = norm.clamp_max(5.0)
+    norm = torch.clamp(norm, norm_low_clip, 5.0)
 
     # constrain range of logb
-    logb = logb.clamp_min(-3.0)
+    # low range constraint: prevent strong confidence when overfitting
+    # high range constraint: force some data dependence
+    # logb = 3.0 * torch.tanh(logb / 3.0)
+    logb = torch.clamp_min(logb, -3.0)
 
     # ln(2) = 0.694
     losses = logb + (norm + 0.1) * torch.exp(-logb)
@@ -139,7 +197,7 @@ def quadrant_margin_loss(x1, x2, t1, t2, max_r1, max_r2, max_r3, max_r4):
     )
 
 
-class SmoothL1Loss(object):
+class SmoothL1Loss():
     r_smooth = 0.0
 
     def __init__(self, *, scale_required=True):
@@ -176,7 +234,7 @@ class MultiHeadLoss(torch.nn.Module):
     task_sparsity_weight = 0.0
 
     def __init__(self, losses, lambdas):
-        super(MultiHeadLoss, self).__init__()
+        super().__init__()
 
         if not lambdas:
             lambdas = [1.0 for l in losses for _ in l.field_names]
@@ -301,7 +359,6 @@ class MultiHeadLossAutoTuneKendall(torch.nn.Module):
             total_loss = total_loss + self.task_sparsity_weight * head_sparsity_loss
 
         return total_loss, flat_head_losses
-
 
 class MultiHeadLossAutoTuneOld(torch.nn.Module):
     task_sparsity_weight = 0.0
@@ -466,19 +523,22 @@ class MultiHeadLossAutoTuneVariance(torch.nn.Module):
 class CompositeLoss(torch.nn.Module):
     background_weight = 1.0
     focal_gamma = 1.0
+    b_scale = 1.0
     margin = False
 
     def __init__(self, head_net: heads.CompositeField, regression_loss):
-        super(CompositeLoss, self).__init__()
+        super().__init__()
         self.n_vectors = head_net.meta.n_vectors
         self.n_scales = head_net.meta.n_scales
 
         LOG.debug('%s: n_vectors = %d, n_scales = %d, margin = %s',
                   head_net.meta.name, self.n_vectors, self.n_scales, self.margin)
 
-        self.confidence_loss = Bce()
+        #self.confidence_loss = Bce(focal_gamma=self.focal_gamma, detach_focal=True)
+        self.confidence_loss = FocalLoss()
         self.regression_loss = regression_loss or laplace_loss
-        self.scale_losses = torch.nn.ModuleList([Log1pL1Tuned() for _ in range(self.n_scales)])
+        self.scale_losses = torch.nn.ModuleList([ScaleLoss(self.b_scale, low_clip=0.0)
+                                                 for _ in range(self.n_scales)])
         self.field_names = (
             ['{}.c'.format(head_net.meta.name)] +
             ['{}.vec{}'.format(head_net.meta.name, i + 1) for i in range(self.n_vectors)] +
@@ -512,15 +572,12 @@ class CompositeLoss(torch.nn.Module):
         bce_target = torch.masked_select(target_confidence, bce_masks)
         x_confidence = torch.masked_select(x_confidence, bce_masks)
         ce_loss = self.confidence_loss(x_confidence, bce_target)
-        if self.focal_gamma != 0.0:
-            pt = torch.exp(-ce_loss)
-            ce_loss = (1.0 - pt)**self.focal_gamma * ce_loss
         if self.background_weight != 1.0:
             bce_weight = torch.ones_like(bce_target, requires_grad=False)
             bce_weight[bce_target == 0] *= self.background_weight
             ce_loss = ce_loss * bce_weight
 
-        ce_loss = ce_loss.sum() / (batch_size) #(1000*batch_size)
+        ce_loss = ce_loss.sum() #/ batch_size
         return ce_loss
 
     def _localization_loss(self, x_regs, x_logbs, target_regs):
@@ -539,7 +596,8 @@ class CompositeLoss(torch.nn.Module):
                 torch.masked_select(x_logbs[:, :, i], reg_masks),
                 torch.masked_select(target_reg[:, :, 0], reg_masks),
                 torch.masked_select(target_reg[:, :, 1], reg_masks),
-            ).sum() /(batch_size))#(100*batch_size))
+                norm_low_clip=0.0,
+            ).mean() )#.sum() / batch_size)
 
         return reg_losses
 
@@ -551,7 +609,7 @@ class CompositeLoss(torch.nn.Module):
             sl(
                 torch.masked_select(x_scales[:, :, i], torch.isnan(target_scale).bitwise_not_()),
                 torch.masked_select(target_scale, torch.isnan(target_scale).bitwise_not_()),
-            ).sum() / (100*batch_size)
+            ).mean() #.sum() / batch_size
             for i, (sl, target_scale) in enumerate(zip(self.scale_losses, target_scales))
         ]
 
@@ -620,17 +678,20 @@ def cli(parser):
                        help='type of regression loss')
     group.add_argument('--background-weight', default=CompositeLoss.background_weight, type=float,
                        help='BCE weight where ground truth is background')
+    group.add_argument('--b-scale', default=CompositeLoss.b_scale, type=float,
+                       help='Laplace width b for scale loss')
     group.add_argument('--focal-gamma', default=CompositeLoss.focal_gamma, type=float,
                        help='when > 0.0, use focal loss with the given gamma')
     group.add_argument('--margin-loss', default=False, action='store_true',
                        help='[experimental]')
     group.add_argument('--auto-tune-mtl', default=False, action='store_true',
-                       help='use Kendall\'s prescription for adjusting the multitask weight')
-
+                       help=('[experimental] use Kendall\'s prescription for '
+                             'adjusting the multitask weight'))
+    group.add_argument('--auto-tune-mtl-variance', default=False, action='store_true',
+                       help=('[experimental] use Variance prescription for '
+                             'adjusting the multitask weight'))
     group.add_argument('--auto-tune-mtl-old', default=False, action='store_true',
                        help='use old Kendall\'s prescription for adjusting the multitask weight')
-    group.add_argument('--auto-tune-mtl-variance', default=False, action='store_true',
-                       help='use Variance prescription for adjusting the multitask weight')
     assert MultiHeadLoss.task_sparsity_weight == MultiHeadLossAutoTuneKendall.task_sparsity_weight
     assert MultiHeadLoss.task_sparsity_weight == MultiHeadLossAutoTuneVariance.task_sparsity_weight
     group.add_argument('--task-sparsity-weight',
@@ -642,6 +703,7 @@ def configure(args):
     # apply for CompositeLoss
     CompositeLoss.background_weight = args.background_weight
     CompositeLoss.focal_gamma = args.focal_gamma
+    CompositeLoss.b_scale = args.b_scale
     CompositeLoss.margin = args.margin_loss
 
     # MultiHeadLoss
@@ -659,8 +721,8 @@ def factory_from_args(args, head_nets):
         args.lambdas,
         reg_loss_name=args.regression_loss,
         device=args.device,
-        auto_tune_mtl=args.auto_tune_mtl,
         auto_tune_mtl_old=args.auto_tune_mtl_old,
+        auto_tune_mtl_kendall=args.auto_tune_mtl,
         auto_tune_mtl_variance=args.auto_tune_mtl_variance,
     )
 
@@ -668,7 +730,7 @@ def factory_from_args(args, head_nets):
 # pylint: disable=too-many-branches
 def factory(head_nets, lambdas, *,
             reg_loss_name=None, device=None,
-            auto_tune_mtl=False, auto_tune_mtl_old=False, auto_tune_mtl_variance=False):
+            auto_tune_mtl_kendall=False, auto_tune_mtl_old=False, auto_tune_mtl_variance=False):
     if isinstance(head_nets[0], (list, tuple)):
         return [factory(hn, lam,
                         reg_loss_name=reg_loss_name,
@@ -699,7 +761,7 @@ def factory(head_nets, lambdas, *,
                                 ''.format(head_net.meta.name, type(head_net)))
 
     losses = [CompositeLoss(head_net, reg_loss) for head_net in head_nets]
-    if auto_tune_mtl:
+    if auto_tune_mtl_kendall:
         loss = MultiHeadLossAutoTuneKendall(losses, lambdas,
                                             sparse_task_parameters=sparse_task_parameters)
     elif auto_tune_mtl_old:

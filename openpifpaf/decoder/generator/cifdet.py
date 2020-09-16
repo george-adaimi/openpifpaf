@@ -35,10 +35,10 @@ class CifDet(Generator):
         if True:
             fullButterfly = False
             if not fullButterfly:
-                cifhr = CifDetHr(self.field_config).fill(fields)
-                seeds = CifDetSeeds(cifhr, self.field_config).fill(fields)
-                # cifhr = ButterflyHr(self.field_config).fill(fields)
-                # seeds = ButterflySeeds(cifhr, self.field_config).fill(fields)
+                #cifhr = CifDetHr(self.field_config).fill(fields)
+                #seeds = CifDetSeeds(cifhr, self.field_config).fill(fields)
+                cifhr = ButterflyHr(self.field_config).fill(fields)
+                seeds = ButterflySeeds(cifhr, self.field_config).fill(fields)
                 occupied = Occupancy(cifhr.accumulated.shape, 2, min_scale=2.0)
 
                 annotations = []
@@ -65,7 +65,7 @@ class CifDet(Generator):
                          profile=None,
                          debug_visualizer=self.field_config.cif_visualizers[0])(fields)
 
-        annotations = nms.Detection().annotations_fixed(annotations, nms_type='snms')
+        annotations = nms.Detection().annotations_fixed(annotations, nms_type='nms')
         annotations = nms.Detection().annotations(annotations, iou_threshold=0.9,nms_type='nms')
         # annotations = sorted(annotations, key=lambda a: -a.score)
 
