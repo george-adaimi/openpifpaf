@@ -48,3 +48,8 @@ debug.*.png
 test-clis-*/
 *.mlmodel
 guide/cifar10_*.predictions.json
+PRED/
+*_debug
+outputs
+pretrained
+data

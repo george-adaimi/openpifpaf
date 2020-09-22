@@ -125,7 +125,7 @@ def preprocess_factory(args):
         assert args.long_edge, '--long-edge must be provided for batch size > 1'
         preprocess.append(transforms.CenterPad(args.long_edge))
     else:
-        preprocess.append(transforms.CenterPadTight(16))
+        preprocess.append(transforms.CenterPadTight(32))
     return transforms.Compose(preprocess + [transforms.EVAL_TRANSFORM])
 
 
