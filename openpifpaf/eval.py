@@ -19,18 +19,15 @@ LOG = logging.getLogger(__name__)
 def default_output_name(args):
     output = '{}.eval-{}'.format(args.checkpoint, args.dataset)
 
-    if not args.force_complete_pose:
-        output += '-noforcecompletepose'
-
     # coco
     if args.coco_eval_orientation_invariant or args.coco_eval_extended_scale:
-        output += '-'
+        output += '-coco'
         if args.coco_eval_orientation_invariant:
             output += 'o'
         if args.coco_eval_extended_scale:
             output += 's'
-    if args.coco_eval_long_edge != 641:
-        output += '-edge{}'.format(args.coco_eval_long_edge)
+    if args.coco_eval_long_edge is not None and args.coco_eval_long_edge != 641:
+        output += '-cocoedge{}'.format(args.coco_eval_long_edge)
 
     if args.two_scale:
         output += '-twoscale'
@@ -58,7 +55,7 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
 
     plugins.register()
     datasets.cli(parser)
-    decoder.cli(parser, force_complete_pose=True)
+    decoder.cli(parser)
     network.cli(parser)
     show.cli(parser)
     visualizer.cli(parser)
@@ -77,6 +74,7 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
     parser.add_argument('--show-final-image', default=False, action='store_true')
 
     group = parser.add_argument_group('logging')
+    group.add_argument('-q', '--quiet', default=False, action='store_true')
     group.add_argument('--debug', default=False, action='store_true',
                        help='print debug messages')
     group.add_argument('--debug-images', default=False, action='store_true',
@@ -90,6 +88,9 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
         args.debug = True
 
     log_level = logging.INFO if not args.debug else logging.DEBUG
+    if args.quiet:
+        assert not args.debug
+        log_level = logging.WARNING
     if args.log_stats:
         # pylint: disable=import-outside-toplevel
         from pythonjsonlogger import jsonlogger
@@ -151,7 +152,7 @@ def main():
         print('{} not found. Processing: {}'.format(stats_file, args.checkpoint))
 
     datamodule = datasets.factory(args.dataset)
-    model_cpu, _ = network.factory_from_args(args)
+    model_cpu, _ = network.factory_from_args(args, head_metas=datamodule.head_metas)
     model = model_cpu.to(args.device)
     if not args.disable_cuda and torch.cuda.device_count() > 1:
         LOG.info('Using multiple GPUs: %d', torch.cuda.device_count())
@@ -171,9 +172,11 @@ def main():
     nn_time = 0.0
     decoder_time = 0.0
     n_images = 0
-    for batch_i, (image_tensors, anns_batch, meta_batch) in enumerate(datamodule.eval_loader()):
-        LOG.info('batch %d, last loop: %.3fs, batches per second=%.1f',
-                 batch_i, time.time() - loop_start,
+
+    loader = datamodule.eval_loader()
+    for batch_i, (image_tensors, anns_batch, meta_batch) in enumerate(loader):
+        LOG.info('batch %d / %d, last loop: %.3fs, batches per second=%.1f',
+                 batch_i, len(loader), time.time() - loop_start,
                  batch_i / max(1, (time.time() - total_start)))
         loop_start = time.time()
 
@@ -188,7 +191,7 @@ def main():
         for pred, gt_anns, image_meta in zip(pred_batch, anns_batch, meta_batch):
             pred = transforms.Preprocess.annotations_inverse(pred, image_meta)
             for metric in metrics:
-                metric.accumulate(pred, image_meta)
+                metric.accumulate(pred, image_meta, ground_truth=gt_anns)
 
             if args.show_final_image:
                 # show ground truth and predictions on original image

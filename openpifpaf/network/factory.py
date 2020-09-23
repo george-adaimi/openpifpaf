@@ -21,10 +21,13 @@ CHECKPOINT_URLS = {
     'resnet152': PRETRAINED_UNAVAILABLE,
     'shufflenetv2x1': PRETRAINED_UNAVAILABLE,
     'shufflenetv2x2': PRETRAINED_UNAVAILABLE,
+    'shufflenetv2k16': ('https://github.com/vita-epfl/openpifpaf-torchhub/releases/download/'
+                        'v0.12a1/shufflenetv2k16w-200905-113300-cocokp-e7b371e6.pkl'),
     'shufflenetv2k16w': ('https://github.com/vita-epfl/openpifpaf-torchhub/releases/download/'
                          'v0.12a1/shufflenetv2k16w-200905-113300-cocokp-e7b371e6.pkl'),
-    'shufflenetv2k30w': PRETRAINED_UNAVAILABLE,
-    'shufflenetv2k44w': PRETRAINED_UNAVAILABLE,
+    'shufflenetv2k30': ('https://github.com/vita-epfl/openpifpaf-torchhub/releases/download/'
+                        'v0.12a1/shufflenetv2k30w-200918-223448-cocokp-o10s-be714792.pkl'),
+    'shufflenetv2k44': PRETRAINED_UNAVAILABLE,
 }
 
 BASE_TYPES = set([basenetworks.Resnet, basenetworks.ShuffleNetV2, basenetworks.ShuffleNetV2K])
@@ -39,14 +42,16 @@ BASE_FACTORIES = {
         'shufflenetv2x1', torchvision.models.shufflenet_v2_x1_0, 1024),
     'shufflenetv2x2': lambda: basenetworks.ShuffleNetV2(
         'shufflenetv2x2', torchvision.models.shufflenet_v2_x2_0),
+    'shufflenetv2k16': lambda: basenetworks.ShuffleNetV2K(
+        'shufflenetv2k16', [4, 8, 4], [24, 348, 696, 1392, 1392]),
     'shufflenetv2k16w': lambda: basenetworks.ShuffleNetV2K(
-        'shufflenetv2k16w', [4, 8, 4], [24, 348, 696, 1392, 1392]),
-    'shufflenetv2k20w': lambda: basenetworks.ShuffleNetV2K(
-        'shufflenetv2k20w', [5, 10, 5], [32, 512, 1024, 2048, 2048]),
-    'shufflenetv2k30w': lambda: basenetworks.ShuffleNetV2K(
-        'shufflenetv2k30w', [8, 16, 6], [32, 512, 1024, 2048, 2048]),
-    'shufflenetv2k44w': lambda: basenetworks.ShuffleNetV2K(
-        'shufflenetv2k44w', [12, 24, 8], [32, 512, 1024, 2048, 2048]),
+        'shufflenetv2k16', [4, 8, 4], [24, 348, 696, 1392, 1392]),
+    'shufflenetv2k20': lambda: basenetworks.ShuffleNetV2K(
+        'shufflenetv2k20', [5, 10, 5], [32, 512, 1024, 2048, 2048]),
+    'shufflenetv2k30': lambda: basenetworks.ShuffleNetV2K(
+        'shufflenetv2k30', [8, 16, 6], [32, 512, 1024, 2048, 2048]),
+    'shufflenetv2k44': lambda: basenetworks.ShuffleNetV2K(
+        'shufflenetv2k44', [12, 24, 8], [32, 512, 1024, 2048, 2048]),
 }
 
 HEAD_TYPES = set([heads.CompositeField3])
@@ -70,6 +75,7 @@ def factory_from_args(args, *, head_metas=None):
         multi_scale=args.multi_scale,
         multi_scale_hflip=args.multi_scale_hflip,
         download_progress=args.download_progress,
+        head_consolidation=args.head_consolidation,
     )
 
 
@@ -112,7 +118,7 @@ def factory(
         multi_scale=False,
         multi_scale_hflip=True,
         download_progress=True,
-        head_strategy='extend',
+        head_consolidation='filter_and_extend',
 ) -> Tuple[nets.Shell, int]:
 
     if base_name:
@@ -127,8 +133,13 @@ def factory(
             checkpoint = 'shufflenetv2k16w'
 
         if CHECKPOINT_URLS.get(checkpoint, None) is PRETRAINED_UNAVAILABLE:
-            raise Exception('the pretrained model for {} is not available yet '
-                            'in this release cycle'.format(checkpoint))
+            raise Exception(
+                'The pretrained model for {} is not available yet '
+                'in this release cycle. Use one of {}.'.format(
+                    checkpoint,
+                    [k for k, v in CHECKPOINT_URLS.items() if v is not PRETRAINED_UNAVAILABLE],
+                )
+            )
         checkpoint = CHECKPOINT_URLS.get(checkpoint, checkpoint)
 
         if checkpoint.startswith('http'):
@@ -142,7 +153,10 @@ def factory(
         net_cpu: nets.Shell = checkpoint['model']
         epoch = checkpoint['epoch']
 
-        if head_metas is not None and head_strategy == 'keep':
+        # normalize for backwards compatibility
+        nets.model_migration(net_cpu)
+
+        if head_metas is not None and head_consolidation == 'keep':
             LOG.info('keeping heads from loaded checkpoint')
             # Match head metas by name and overwrite with meta from checkpoint.
             # This makes sure that the head metas have their head_index and
@@ -154,13 +168,13 @@ def factory(
                 if input_index is None:
                     continue
                 head_metas[input_index] = hn.meta
-        elif head_metas is not None and head_strategy == 'create':
+        elif head_metas is not None and head_consolidation == 'create':
             LOG.info('creating new heads')
             headnets = [HEAD_FACTORIES[h.__class__](h, net_cpu.base_net.out_features)
                         for h in head_metas]
             net_cpu.set_head_nets(headnets)
-        elif head_metas is not None and head_strategy == 'extend':
-            LOG.info('extending existing heads')
+        elif head_metas is not None and head_consolidation == 'filter_and_extend':
+            LOG.info('filtering for dataset heads and extending existing heads')
             existing_headnets = {(hn.meta.dataset, hn.meta.name): hn
                                  for hn in net_cpu.head_nets}
             headnets = []
@@ -177,10 +191,7 @@ def factory(
                         HEAD_FACTORIES[meta.__class__](meta, net_cpu.base_net.out_features))
             net_cpu.set_head_nets(headnets)
         elif head_metas is not None:
-            raise Exception('head strategy {} unknown'.format(head_strategy))
-
-        # normalize for backwards compatibility
-        nets.model_migration(net_cpu)
+            raise Exception('head strategy {} unknown'.format(head_consolidation))
 
         # initialize for eval
         net_cpu.eval()
@@ -257,3 +268,8 @@ def cli(parser):
                        help='suppress model download progress bar')
     group.add_argument('--dense-coupling', default=0.0, type=float,
                        help='dense coupling')
+    group.add_argument('--head-consolidation',
+                       choices=('keep', 'create', 'filter_and_extend'),
+                       default='filter_and_extend',
+                       help=('consolidation strategy for a checkpoint\'s head '
+                             'networks and the heads specified by the datamodule'))

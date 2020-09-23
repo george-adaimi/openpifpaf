@@ -37,16 +37,17 @@ class CocoKp(DataModule):
     val_image_dir = 'data-mscoco/images/val2017/'
     eval_image_dir = val_image_dir
 
-    n_images = None
     square_edge = 385
     extended_scale = False
     orientation_invariant = 0.0
+    blur = 0.0
     augmentation = True
     rescale_images = 1.0
     upsample_stride = 1
     min_kp_anns = 1
 
-    eval_long_edge = None
+    eval_annotation_filter = True
+    eval_long_edge = 641
     eval_orientation_invariant = 0.0
     eval_extended_scale = False
 
@@ -89,9 +90,6 @@ class CocoKp(DataModule):
         group.add_argument('--cocokp-val-image-dir',
                            default=cls.val_image_dir)
 
-        group.add_argument('--cocokp-n-images',
-                           default=cls.n_images, type=int,
-                           help='number of images to sample')
         group.add_argument('--cocokp-square-edge',
                            default=cls.square_edge, type=int,
                            help='square edge of input images')
@@ -102,6 +100,9 @@ class CocoKp(DataModule):
         group.add_argument('--cocokp-orientation-invariant',
                            default=cls.orientation_invariant, type=float,
                            help='augment with random orientations')
+        group.add_argument('--cocokp-blur',
+                           default=cls.blur, type=float,
+                           help='augment with blur')
         assert cls.augmentation
         group.add_argument('--cocokp-no-augmentation',
                            dest='cocokp_augmentation',
@@ -122,7 +123,12 @@ class CocoKp(DataModule):
         eval_set_group.add_argument('--cocokp-eval-test2017', default=False, action='store_true')
         eval_set_group.add_argument('--cocokp-eval-testdev2017', default=False, action='store_true')
 
-        group.add_argument('--coco-eval-long-edge', default=cls.eval_long_edge, type=int)
+        assert cls.eval_annotation_filter
+        group.add_argument('--coco-no-eval-annotation-filter',
+                           dest='coco_eval_annotation_filter',
+                           default=True, action='store_false')
+        group.add_argument('--coco-eval-long-edge', default=cls.eval_long_edge, type=int,
+                           help='set to zero to deactivate rescaling')
         assert not cls.eval_extended_scale
         group.add_argument('--coco-eval-extended-scale', default=False, action='store_true')
         group.add_argument('--coco-eval-orientation-invariant',
@@ -140,22 +146,25 @@ class CocoKp(DataModule):
         cls.train_image_dir = args.cocokp_train_image_dir
         cls.val_image_dir = args.cocokp_val_image_dir
 
-        cls.n_images = args.cocokp_n_images
         cls.square_edge = args.cocokp_square_edge
         cls.extended_scale = args.cocokp_extended_scale
         cls.orientation_invariant = args.cocokp_orientation_invariant
+        cls.blur = args.cocokp_blur
         cls.augmentation = args.cocokp_augmentation
         cls.rescale_images = args.cocokp_rescale_images
         cls.upsample_stride = args.cocokp_upsample
         cls.min_kp_anns = args.cocokp_min_kp_anns
 
         # evaluation
+        cls.eval_annotation_filter = args.coco_eval_annotation_filter
         if args.cocokp_eval_test2017:
             cls.eval_image_dir = cls._test2017_image_dir
             cls.eval_annotations = cls._test2017_annotations
+            cls.annotation_filter = False
         if args.cocokp_eval_testdev2017:
             cls.eval_image_dir = cls._test2017_image_dir
             cls.eval_annotations = cls._testdev2017_annotations
+            cls.annotation_filter = False
         cls.eval_long_edge = args.coco_eval_long_edge
         cls.eval_orientation_invariant = args.coco_eval_orientation_invariant
         cls.eval_extended_scale = args.coco_eval_extended_scale
@@ -189,6 +198,10 @@ class CocoKp(DataModule):
                              2.0 * self.rescale_images),
                 power_law=True, stretch_range=(0.75, 1.33))
 
+        blur_t = None
+        if self.blur:
+            blur_t = transforms.RandomApply(transforms.Blur(), self.blur)
+
         orientation_t = None
         if self.orientation_invariant:
             orientation_t = transforms.RandomApply(
@@ -199,6 +212,7 @@ class CocoKp(DataModule):
             transforms.AnnotationJitter(),
             transforms.RandomApply(transforms.HFlip(COCO_KEYPOINTS, HFLIP), 0.5),
             rescale_t,
+            blur_t,
             transforms.Crop(self.square_edge, use_area_of_interest=True),
             transforms.CenterPad(self.square_edge),
             orientation_t,
@@ -211,7 +225,6 @@ class CocoKp(DataModule):
             image_dir=self.train_image_dir,
             ann_file=self.train_annotations,
             preprocess=self._preprocess(),
-            n_images=self.n_images,
             annotation_filter=True,
             min_kp_anns=self.min_kp_anns,
             category_ids=[1],
@@ -226,7 +239,6 @@ class CocoKp(DataModule):
             image_dir=self.val_image_dir,
             ann_file=self.val_annotations,
             preprocess=self._preprocess(),
-            n_images=self.n_images,
             annotation_filter=True,
             min_kp_anns=self.min_kp_anns,
             category_ids=[1],
@@ -291,10 +303,9 @@ class CocoKp(DataModule):
             image_dir=self.eval_image_dir,
             ann_file=self.eval_annotations,
             preprocess=self._eval_preprocess(),
-            n_images=self.n_images,
-            annotation_filter=(self.eval_annotations == self.val_annotations),
-            min_kp_anns=self.min_kp_anns if self.eval_annotations == self.val_annotations else 0,
-            category_ids=[1],
+            annotation_filter=self.eval_annotation_filter,
+            min_kp_anns=self.min_kp_anns if self.eval_annotation_filter else 0,
+            category_ids=[1] if self.eval_annotation_filter else [],
         )
         return torch.utils.data.DataLoader(
             eval_data, batch_size=self.batch_size, shuffle=False,

@@ -1,12 +1,14 @@
 from abc import abstractmethod
+import argparse
 import logging
 import multiprocessing
 import sys
 import time
+from typing import List
 
 import torch
 
-from ... import visualizer
+from ... import annotation, visualizer
 
 LOG = logging.getLogger(__name__)
 
@@ -18,6 +20,10 @@ class DummyPool():
 
 
 class Generator:
+    """Generate predictions from image or field inputs.
+
+    When creating a new generator, the main implementation goes into `__call__()`.
+    """
     default_worker_pool = None
 
     def __init__(self):
@@ -42,15 +48,29 @@ class Generator:
         self.last_decoder_time = 0.0
         self.last_nn_time = 0.0
 
+    @classmethod
+    def cli(cls, parser: argparse.ArgumentParser):
+        """Commond line interface (CLI) to extend argument parser."""
+
+    @classmethod
+    def configure(cls, args: argparse.Namespace):
+        """Take the parsed argument parser output and configure class variables."""
+
+    @classmethod
+    def factory(cls, head_metas) -> List['Generator']:
+        """Create instances of an implementation."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def __call__(self, fields, *, initial_annotations=None) -> List[annotation.Base]:
+        """For single image, from fields to annotations."""
+        raise NotImplementedError
+
     def __getstate__(self):
         return {
             k: v for k, v in self.__dict__.items()
             if k not in ('worker_pool',)
         }
-
-    @classmethod
-    def factory(cls, head_metas):
-        raise NotImplementedError
 
     @staticmethod
     def fields_batch(model, image_batch, *, device=None):
@@ -87,11 +107,6 @@ class Generator:
 
         LOG.debug('nn processing time: %.3fs', time.time() - start)
         return heads
-
-    @abstractmethod
-    def __call__(self, fields, *, initial_annotations=None):
-        """For single image, from fields to annotations."""
-        raise NotImplementedError()
 
     def batch(self, model, image_batch, *, device=None, gt_anns_batch=None):
         """From image batch straight to annotations batch."""
