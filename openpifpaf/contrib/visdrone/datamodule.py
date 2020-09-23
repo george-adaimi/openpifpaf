@@ -20,7 +20,7 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
     pin_memory = False
 
     n_images = None
-    square_edge = 512
+    square_edge = 513
     extended_scale = False
     orientation_invariant = 0.0
     augmentation = True
@@ -191,8 +191,8 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
             rescale_t = openpifpaf.transforms.RescaleAbsolute(self.eval_long_edge)
 
         if self.batch_size == 1:
-            #preprocess += [transforms.CenterPadTight(16)]
-            padding_t = openpifpaf.transforms.CenterPadTight(32)
+            padding_t += [transforms.CenterPadTight(16)]
+            #padding_t = openpifpaf.transforms.CenterPadTight(32)
         else:
             assert self.eval_long_edge
             padding_t = openpifpaf.transforms.CenterPad(self.eval_long_edge)

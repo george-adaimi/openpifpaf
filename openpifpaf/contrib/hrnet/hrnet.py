@@ -267,9 +267,9 @@ blocks_dict = {
 }
 
 class DetectionNeck(nn.Module):
-    def __init__(self, in_features):
+    def __init__(self, in_features, out_features):
         super(DetectionNeck, self).__init__()
-        self.conv1 = nn.Conv2d(in_features, 512, kernel_size=1, stride=1, padding=0,
+        self.conv1 = nn.Conv2d(in_features, out_features, kernel_size=1, stride=1, padding=0,
                                bias=False)
     def forward(self, x):
         outs = []
@@ -284,7 +284,7 @@ class DetectionNeck(nn.Module):
 
 class HighResolutionNet(nn.Module):
 
-    def __init__(self, cfg_file='', detection=False):
+    def __init__(self, cfg_file='', detection=False, detection_channels=None):
         self.cfg = open_cfg(cfg_file)
         self.inplanes = 64
         extra = self.cfg.MODEL.EXTRA
@@ -334,7 +334,8 @@ class HighResolutionNet(nn.Module):
 
         self.detection = detection
         if self.detection:
-            self.detection_neck = DetectionNeck(15*num_channels[0])
+            assert detection_channels is not None
+            self.detection_neck = DetectionNeck(sum(num_channels), detection_channels)
         self.pretrained_layers = self.cfg['MODEL']['EXTRA']['PRETRAINED_LAYERS']
 
     def _make_transition_layer(
