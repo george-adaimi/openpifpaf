@@ -15,7 +15,7 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
     train_annotations = "data/VisDrone2019/VisDrone2019-DET-train/annotations"
     val_annotations = "data/VisDrone2019/VisDrone2019-DET-val/annotations"
     eval_annotations = val_annotations
-
+    test_path = {'val': "data/VisDrone2019/VisDrone2019-DET-val/", 'test-dev': "data/VisDrone2019/VisDrone2019-DET-test-dev/", 'test-challenge': "data/VisDrone2019/VisDrone2019-DET-test-challenge/"}
     debug = False
     pin_memory = False
 
@@ -91,6 +91,9 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
         cls.val_annotations = args.visdrone_val_annotations
         cls.train_image_dir = args.visdrone_train_image_dir
         cls.val_image_dir = args.visdrone_val_image_dir
+
+        cls.eval_image_dir = cls.test_path[args.visdrone_split] + "images"
+        cls.eval_annotations = cls.test_path[args.visdrone_split] + "annotations"
 
         cls.n_images = args.visdrone_n_images
         cls.square_edge = args.visdrone_square_edge
@@ -189,9 +192,9 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
                 ], salt=1)
         elif self.eval_long_edge:
             rescale_t = openpifpaf.transforms.RescaleAbsolute(self.eval_long_edge)
-
+        padding_t = None
         if self.batch_size == 1:
-            padding_t += [transforms.CenterPadTight(16)]
+            padding_t = openpifpaf.transforms.CenterPadTight(16)
             #padding_t = openpifpaf.transforms.CenterPadTight(32)
         else:
             assert self.eval_long_edge

@@ -193,8 +193,8 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
             rescale_t = [openpifpaf.transforms.RescaleAbsolute(self.eval_long_edge)]
 
         if self.batch_size == 1:
-            #preprocess += [transforms.CenterPadTight(16)]
-            padding_t = [openpifpaf.transforms.CenterPadTight(32)]
+            padding_t = [transforms.CenterPadTight(16)]
+            #padding_t = [openpifpaf.transforms.CenterPadTight(32)]
         else:
             assert self.eval_long_edge
             padding_t = [openpifpaf.transforms.CenterPad(self.eval_long_edge)]

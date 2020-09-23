@@ -58,6 +58,7 @@ class CifDet(Generator):
 
         self.occupancy_visualizer.predicted(occupied)
 
+        #annotations = nms.Detection().annotations_per_category(annotations, nms_type='nms')
         annotations = nms.Detection().annotations(annotations)
         # annotations = sorted(annotations, key=lambda a: -a.score)
 

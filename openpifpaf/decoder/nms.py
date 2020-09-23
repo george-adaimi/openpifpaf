@@ -2,6 +2,7 @@ import logging
 import time
 
 import numpy as np
+from collections import defaultdict
 
 from .occupancy import Occupancy
 
@@ -75,6 +76,50 @@ class Detection:
         box_area = box[:, 2] * box[:, 3]
         other_areas = other_boxes[:, 2] * other_boxes[:, 3]
         return inter_area / (box_area + other_areas - inter_area + 1e-5)
+
+    def annotations_per_category(self, anns, method=2, sigma=0.5, nms_type='both'):
+        start = time.perf_counter()
+
+        dict_anns = defaultdict(list)
+        all_boxes = defaultdict(list)
+
+        for ann in anns:
+            dict_anns[ann.category].append(ann)
+
+        if not anns:
+            return anns
+
+
+
+        ret_anns = []
+        for cat in dict_anns.keys():
+            dict_anns[cat] = sorted(dict_anns[cat], key=lambda a: -a.score)
+            all_boxes[cat] = np.stack([ann.bbox for ann in dict_anns[cat]])
+
+            for ann_i, ann in enumerate(dict_anns[cat][1:], start=1):
+                ious = self.bbox_iou(ann.bbox, all_boxes[cat][:ann_i])
+                max_iou = np.max(ious)
+
+                if method == 1:  # linear
+                    weight = 1 - max_iou
+                elif method == 2:  # gaussian
+                    weight = np.exp(-(max_iou * max_iou) / sigma)
+                else:  # original NMS
+                    weight = 0
+
+                if nms_type in ('both', 'nms') and max_iou > self.iou_threshold:
+                    ann.score *= 0
+                elif nms_type in ('both', 'snms') and max_iou > self.iou_threshold_soft:
+                    ann.score *= weight
+
+            for ann in dict_anns[cat]:
+                if ann.score > 0.2:
+                    ret_anns.append(ann)
+
+        anns = sorted(ret_anns, key=lambda a: -a.score)
+
+        LOG.debug('nms = %.3fs', time.perf_counter() - start)
+        return anns
 
     def annotations(self, anns):
         start = time.perf_counter()
