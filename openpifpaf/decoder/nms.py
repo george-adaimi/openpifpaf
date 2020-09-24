@@ -113,7 +113,7 @@ class Detection:
                     ann.score *= weight
 
             for ann in dict_anns[cat]:
-                if ann.score > 0.2:
+                if ann.score > self.instance_threshold:
                     ret_anns.append(ann)
 
         anns = sorted(ret_anns, key=lambda a: -a.score)

@@ -1,20 +1,21 @@
 import logging
 import time
+import numpy as np
 
 from openpifpaf.decoder import CifHr
-#from .functional import scalar_square_add_2dgauss_with_max, cumulative_average_2d
+from .functional import scalar_square_add_2dgauss, cumulative_average_2d
 
 LOG = logging.getLogger(__name__)
 
 class ButterflyHr(CifHr):
-    def fill_multiple(self, all_fields, metas):
+    def fill(self, all_fields, metas):
         start = time.perf_counter()
 
         if self.accumulated is None:
             shape = (
-                cifs[0].shape[0],
-                int((cifs[0].shape[2]) * stride),
-                int((cifs[0].shape[3]) * stride),
+                all_fields[0].shape[0],
+                int((all_fields[0].shape[2]) * metas[0].stride),
+                int((all_fields[0].shape[3]) * metas[0].stride),
             )
             ta = np.zeros(shape, dtype=np.float32)
             self.scales_n = np.zeros(shape, dtype=np.float32)
@@ -61,8 +62,8 @@ class ButterflyHr(CifHr):
         # Occupancy covers 2sigma.
         # Restrict this accumulation to 1sigma so that seeds for the same joint
         # are properly suppressed.
-        scalar_square_add_2dgauss_with_max(
-            t, x, y, s_w, s_h, (v / self.neighbors).astype(np.float32), truncate=0.5, max_value=100000.0)
+        scalar_square_add_2dgauss(
+            t, x, y, s_w, s_h, (v / self.neighbors).astype(np.float32), truncate=0.5)
 
         cumulative_average_2d(scale_w, n_sw, x, y, s_w, s_h, (s_w), v)
         cumulative_average_2d(scale_h, n_sh, x, y, s_w, s_h, (s_h), v)

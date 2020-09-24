@@ -5,7 +5,6 @@ class HRNet(openpifpaf.network.BaseNetwork):
     detection_channels = 256
     def __init__(self, cfg_file, name, detection=False, is_train=False):
         model = HighResolutionNet(cfg_file=cfg_file, detection=detection, detection_channels= self.detection_channels)
-        import pdb; pdb.set_trace()
         model.init_weights(model.cfg['MODEL']['PRETRAINED'])
         super(HRNet, self).__init__(name, stride=model.stride(), out_features=model.stage4_cfg['NUM_CHANNELS'][0] if not detection else self.detection_channels)
         self.model = model

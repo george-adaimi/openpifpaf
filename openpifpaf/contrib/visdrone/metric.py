@@ -65,7 +65,7 @@ class VisDrone(Base):
             self.gt[fileName] = self.readFile(os.path.join(gt_dir, fileName))
 
 
-    def accumulate(self, predictions, image_meta):
+    def accumulate(self, predictions, image_meta, ground_truth=None):
         image_id = int(image_meta['image_id'])
         width, height = image_meta['width_height']
         self.image_ids.append(image_id)

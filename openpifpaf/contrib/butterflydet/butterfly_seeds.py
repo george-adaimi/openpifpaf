@@ -3,6 +3,7 @@ import time
 
 from openpifpaf.functional import scalar_values
 from openpifpaf.decoder import CifSeeds
+from openpifpaf import headmeta
 
 LOG = logging.getLogger(__name__)
 

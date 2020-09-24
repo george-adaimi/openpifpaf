@@ -1,8 +1,7 @@
 import openpifpaf
 
-#from . import generator
+from . import generator
 
 
 def register():
-    pass
-    #openpifpaf.DECODERS['butterflydet'] = generator.ButterflyDet
+    openpifpaf.DECODERS.add(generator.ButterflyDet)

@@ -42,7 +42,6 @@ class CifDet(Generator):
         if self.visualizers:
             for vis, meta in zip(self.visualizers, self.metas):
                 vis.predicted(fields[meta.head_index])
-
         cifhr = CifDetHr().fill(fields, self.metas)
         seeds = CifDetSeeds(cifhr.accumulated).fill(fields, self.metas)
         occupied = Occupancy(cifhr.accumulated.shape, 2, min_scale=2.0)
@@ -58,8 +57,8 @@ class CifDet(Generator):
 
         self.occupancy_visualizer.predicted(occupied)
 
-        #annotations = nms.Detection().annotations_per_category(annotations, nms_type='nms')
-        annotations = nms.Detection().annotations(annotations)
+        annotations = nms.Detection().annotations_per_category(annotations, nms_type='nms')
+        #annotations = nms.Detection().annotations(annotations)
         # annotations = sorted(annotations, key=lambda a: -a.score)
 
         LOG.info('annotations %d, decoder = %.3fs', len(annotations), time.perf_counter() - start)

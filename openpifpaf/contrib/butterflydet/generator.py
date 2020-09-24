@@ -31,7 +31,7 @@ class ButterflyDet(Generator):
     def factory(cls, head_metas):
         # TODO: multi-scale
         return [
-            CifDet([meta])
+            ButterflyDet([meta])
             for meta in head_metas
             if isinstance(meta, headmeta.CifDet)
         ]

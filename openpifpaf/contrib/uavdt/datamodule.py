@@ -37,7 +37,7 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
         self.categories = ("vehicle")
         cifdet = openpifpaf.headmeta.CifDet('cifdet', 'uavdt', self.categories)
         cifdet.upsample_stride = self.upsample_stride
-        self.head_metas = (cifdet,)
+        self.head_metas = [cifdet,]
 
 
     @classmethod
