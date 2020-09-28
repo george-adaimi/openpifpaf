@@ -62,7 +62,7 @@ class UAVDT(Base):
             x1, x2 = np.clip([x, x+w], a_min=0, a_max=width)
             y1, y2 = np.clip([y, y+h], a_min=0, a_max=height)
             s = pred_data['score']
-            image_annotations.append([image_numb,-1,x1, y1, x2-x1, y2-y1, s, 1, categ-1])
+            image_annotations.append([image_numb,-1,x1, y1, x2-x1, y2-y1, s, 1, categ])
 
         self.predictions[folder+'.txt'] = np.asarray(image_annotations)
 
