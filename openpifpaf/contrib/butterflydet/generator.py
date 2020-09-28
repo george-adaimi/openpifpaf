@@ -58,8 +58,8 @@ class ButterflyDet(Generator):
 
         self.occupancy_visualizer.predicted(occupied)
 
-        #annotations = nms.Detection().annotations_per_category(annotations, nms_type='nms')
-        annotations = nms.Detection().annotations(annotations)
+        annotations = nms.Detection().annotations_per_category(annotations, nms_type='snms')
+        #annotations = nms.Detection().annotations(annotations)
         # annotations = sorted(annotations, key=lambda a: -a.score)
 
         LOG.info('annotations %d, decoder = %.3fs', len(annotations), time.perf_counter() - start)
