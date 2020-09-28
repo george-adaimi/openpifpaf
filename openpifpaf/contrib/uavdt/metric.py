@@ -51,10 +51,10 @@ class UAVDT(Base):
         self.image_ids.append(image_id)
 
         image_annotations = []
-        fileName = annotation['file_dir']
+        fileName = image_meta['file_dir']
         fileName = fileName.split("/")
         folder = fileName[-2]
-        image_numb = int(fileName[-1][3:9])
+        image_numb = int(fileName[-1][3:-4])
         for pred in predictions:
             pred_data = pred.json_data()
             categ = pred_data['category_id']
