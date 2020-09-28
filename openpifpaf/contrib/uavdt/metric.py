@@ -40,9 +40,9 @@ class UAVDT(Base):
         self.gt_dir = gt_dir
         for fileName in os.listdir(gt_dir):
             if '_gt_whole.txt' in fileName:
-                self.gt[fileName] = self.readFile(os.path.join(gt_dir, fileName))
+                self.gt[fileName[:-13]] = self.readFile(os.path.join(gt_dir, fileName))
             elif '_gt_ignore.txt' in fileName:
-                self.gt_ign[fileName] = self.readFile(os.path.join(gt_dir, fileName))
+                self.gt_ign[fileName[:-14]] = self.readFile(os.path.join(gt_dir, fileName))
 
 
     def accumulate(self, predictions, image_meta, ground_truth=None):
@@ -64,19 +64,19 @@ class UAVDT(Base):
             s = pred_data['score']
             image_annotations.append([image_numb,-1,x1, y1, x2-x1, y2-y1, s, 1, categ])
 
-        self.predictions[folder+'.txt'] = np.asarray(image_annotations)
+        self.predictions[folder] = np.asarray(image_annotations)
 
 
     def write_predictions(self, filename):
         mkdir_if_missing(filename)
         for imageName in self.predictions.keys():
-            with open(os.path.join(filename,imageName), "w") as file:
+            with open(os.path.join(filename,imageName+'.txt'), "w") as file:
                 file.write("\n".join([",".join(item) for item in self.predictions[imageName].astype(str)]))
 
         LOG.info('wrote predictions to %s', filename)
         with zipfile.ZipFile(os.path.join(filename,'predictions')+ '.zip', 'w') as myzip:
             for imageName in self.predictions.keys():
-                myzip.write(os.path.join(filename,imageName))
+                myzip.write(os.path.join(filename,imageName+'.txt'))
         LOG.info('wrote %s.zip', os.path.join(filename,'predictions')+ '.zip')
 
     def write_evaluations(self, filename):
@@ -87,12 +87,12 @@ class UAVDT(Base):
                 file.write("\n".join(self.predictions[imageName]))
 
     def stats(self):
-        allgt, alldet, allgt_ign = [], [], []
-        for folder in self.gt.keys():
-            allgt.append(self.gt[folder])
-            alldet.append(self.predictions[folder])
-            allgt_ign.append(self.gt_ign[folder])
-        AP = CalculateDetectionPR_overall2(np.asarray(alldet), np.asarray(allgt), np.asarray(allgt_ign))
+        # allgt, alldet, allgt_ign = [], [], []
+        # for folder in self.predictions.keys():
+        #     allgt.append(self.gt[folder])
+        #     alldet.append(self.predictions[folder])
+        #     allgt_ign.append(self.gt_ign[folder])
+        AP = CalculateDetectionPR_overall2(self.predictions, self.gt, self.gt_ign)
         # AP_obj = {}
         # for obj_attr in range(1,3):
         #     # 1 for Vehicle Category;
@@ -100,7 +100,7 @@ class UAVDT(Base):
         #     # 3 for Out-of-view;
         #     AP_obj[obj_attr] = CalculateDetectionPR_obj2(np.asarray(alldet), np.asarray(allgt), np.asarray(allgt_ign), obj_attr);
 
-        AP_time = CalculateDetectionPR_seq2(np.asarray(alldet), np.asarray(allgt), np.asarray(allgt_ign))
+        AP_time = CalculateDetectionPR_seq2(self.predictions, self.gt, self.gt_ign)
         stats = [AP]
         self.text_labels = ['AP']
         for time, ap_single in AP_time.items():
