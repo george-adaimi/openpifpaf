@@ -6,7 +6,7 @@ from tqdm import tqdm
 from PIL import Image
 
 from openpifpaf.metric.base import Base
-from .uavdteval import CalculateDetectionPR_overall2, CalculateDetectionPR_seq2
+from uavdteval import CalculateDetectionPR_overall2, CalculateDetectionPR_seq2
 
 LOG = logging.getLogger(__name__)
 
