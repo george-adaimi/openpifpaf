@@ -49,6 +49,7 @@ test-clis-*/
 *.mlmodel
 guide/cifar10_*.predictions.json
 PRED/
+PRED
 *_debug
 outputs
 pretrained

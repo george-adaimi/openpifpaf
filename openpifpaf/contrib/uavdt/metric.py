@@ -6,7 +6,7 @@ from tqdm import tqdm
 from PIL import Image
 
 from openpifpaf.metric.base import Base
-from visdroneval.utils import calcAccuracy, dropObjectsInIgr
+from .uavdteval import CalculateDetectionPR_overall2, CalculateDetectionPR_seq2
 
 LOG = logging.getLogger(__name__)
 
@@ -19,9 +19,9 @@ def mkdir_if_missing(directory):
                 raise
 
 
-class VisDrone(Base):
-    text_labels = ['AP_all', 'AP_50', 'AP_75', 'AR_1', 'AR_10',
-                            'AR_100', 'AR_500']
+class UAVDT(Base):
+    #text_labels = ['AP', 'AP_vehicle-categ', 'AP_vehicle-occl', 'AP_out-of-view']
+    text_labels = []
     def readFile(self, filepath):
         result = []
         with open(filepath) as f:
@@ -30,39 +30,19 @@ class VisDrone(Base):
 
         return np.asarray(result)
 
-    def gt_ignoreCleaning(self, gt_og, pred_og):
-        #%% process the annotations and groundtruth
-        allgt = []
-        alldet = []
-
-        for nameImg in tqdm(gt_og.keys()):
-
-            oldgt = gt_og[nameImg]
-            olddet = pred_og[nameImg]
-            #% remove the objects in ignored regions or labeled as others
-
-            with open(os.path.join(self.imgPath, nameImg[:-4]+'.jpg'), 'rb') as f:
-                image = Image.open(f).convert('RGB')
-                imgWidth, imgHeight = image.size
-            newgt, det = dropObjectsInIgr(oldgt, olddet, imgHeight, imgWidth);
-
-            gt = newgt;
-            gt[newgt[:,4] == 0, 4] = 1;
-            gt[newgt[:,4] == 1, 4] = 0;
-            allgt.append(gt);
-            alldet.append(sorted(det, key=lambda x: x[4], reverse=True));
-
-        return np.asarray(allgt), np.asarray(alldet)
     def __init__(self, gt_dir, img_dir):
 
         self.imgPath = img_dir
         self.predictions = {}
         self.image_ids = []
         self.gt = {}
+        self.gt_ign = {}
+        self.gt_dir = gt_dir
         for fileName in os.listdir(gt_dir):
-            if not '.txt' in fileName:
-                continue
-            self.gt[fileName] = self.readFile(os.path.join(gt_dir, fileName))
+            if '_gt_whole.txt' in fileName:
+                self.gt[fileName] = self.readFile(os.path.join(gt_dir, fileName))
+            elif '_gt_ignore.txt' in fileName:
+                self.gt_ign[fileName] = self.readFile(os.path.join(gt_dir, fileName))
 
 
     def accumulate(self, predictions, image_meta, ground_truth=None):
@@ -71,6 +51,10 @@ class VisDrone(Base):
         self.image_ids.append(image_id)
 
         image_annotations = []
+        fileName = annotation['file_dir']
+        fileName = fileName.split("/")
+        folder = fileName[-2]
+        image_numb = int(fileName[-1][3:9])
         for pred in predictions:
             pred_data = pred.json_data()
             categ = pred_data['category_id']
@@ -78,9 +62,9 @@ class VisDrone(Base):
             x1, x2 = np.clip([x, x+w], a_min=0, a_max=width)
             y1, y2 = np.clip([y, y+h], a_min=0, a_max=height)
             s = pred_data['score']
-            image_annotations.append([x1, y1, x2-x1, y2-y1, s, categ, -1, -1])
+            image_annotations.append([image_numb,-1,x1, y1, x2-x1, y2-y1, s, 1, categ-1])
 
-        self.predictions[image_meta['file_name'][:-4]+'.txt'] = np.asarray(image_annotations)
+        self.predictions[folder+'.txt'] = np.asarray(image_annotations)
 
 
     def write_predictions(self, filename):
@@ -103,11 +87,27 @@ class VisDrone(Base):
                 file.write("\n".join(self.predictions[imageName]))
 
     def stats(self):
-        allgt, alldet = self.gt_ignoreCleaning(self.gt, self.predictions)
-        AP_all, AP_50, AP_75, AR_1, AR_10, AR_100, AR_500, AP = calcAccuracy(len(alldet), allgt, alldet)
+        allgt, alldet, allgt_ign = [], [], []
+        for folder in self.gt.keys():
+            allgt.append(self.gt[folder])
+            alldet.append(self.predictions[folder])
+            allgt_ign.append(self.gt_ign[folder])
+        AP = CalculateDetectionPR_overall2(np.asarray(alldet), np.asarray(allgt), np.asarray(allgt_ign))
+        # AP_obj = {}
+        # for obj_attr in range(1,3):
+        #     # 1 for Vehicle Category;
+        #     # 2 for Vehicle Occlusion;
+        #     # 3 for Out-of-view;
+        #     AP_obj[obj_attr] = CalculateDetectionPR_obj2(np.asarray(alldet), np.asarray(allgt), np.asarray(allgt_ign), obj_attr);
 
+        AP_time = CalculateDetectionPR_seq2(np.asarray(alldet), np.asarray(allgt), np.asarray(allgt_ign))
+        stats = [AP]
+        self.text_labels = ['AP']
+        for time, ap_single in AP_time.items():
+            stats.append(ap_single)
+            self.text_labels.append('AP_'+time)
         data = {
-            'stats': [AP_all, AP_50, AP_75, AR_1, AR_10, AR_100, AR_500],
+            'stats': stats,
             'text_labels': self.text_labels,
         }
 
