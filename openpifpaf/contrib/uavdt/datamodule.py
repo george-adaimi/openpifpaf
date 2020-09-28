@@ -79,6 +79,9 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
         group.add_argument('--uavdt-upsample',
                            default=cls.upsample_stride, type=int,
                            help='head upsample stride')
+        group.add_argument('--upsample-full-butterfly',
+                           default=False, action='store_true',
+                           help='use full butterfly')
 
     @classmethod
     def configure(cls, args: argparse.Namespace):
@@ -99,6 +102,7 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
         cls.augmentation = args.uavdt_augmentation
         cls.rescale_images = args.uavdt_rescale_images
         cls.upsample_stride = args.uavdt_upsample
+        cls.full_butterfly = args.upsample_full_butterfly
 
     @staticmethod
     def _convert_data(parent_data, meta):
@@ -112,7 +116,10 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
         return image, anns, meta
 
     def _preprocess(self):
-        enc = openpifpaf.encoder.CifDet(self.head_metas[0])
+        if self.full_butterfly:
+            enc = FullButterfly(self.head_metas[0])
+        else:
+            enc = openpifpaf.encoder.CifDet(self.head_metas[0])
 
         if not self.augmentation:
             return openpifpaf.transforms.Compose([
