@@ -64,7 +64,11 @@ class UAVDT(Base):
             s = pred_data['score']
             image_annotations.append([image_numb,-1,x1, y1, x2-x1, y2-y1, s, 1, categ])
 
-        self.predictions[folder] = np.asarray(image_annotations)
+        if len(image_annotations)>0:
+            if not folder in self.predictions.keys():
+                self.predictions[folder] = np.asarray(image_annotations)
+            else:
+                self.predictions[folder] = np.concatenate([self.predictions[folder], image_annotations])
 
 
     def write_predictions(self, filename):
