@@ -95,13 +95,6 @@ class VisDrone(Base):
                 myzip.write(os.path.join(filename,imageName))
         LOG.info('wrote %s.zip', os.path.join(filename,'predictions')+ '.zip')
 
-    def write_evaluations(self, filename):
-
-        for imageName in self.predictions.keys():
-            mkdir_if_missing(filename)
-            with open(os.path.join(filename,imageName+".txt"), "w") as file:
-                file.write("\n".join(self.predictions[imageName]))
-
     def stats(self):
         allgt, alldet = self.gt_ignoreCleaning(self.gt, self.predictions)
         AP_all, AP_50, AP_75, AR_1, AR_10, AR_100, AR_500, AP = calcAccuracy(len(alldet), allgt, alldet)
