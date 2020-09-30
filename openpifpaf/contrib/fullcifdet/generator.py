@@ -3,8 +3,8 @@ import time
 
 from openpifpaf.decoder.generator import CifDet
 from openpifpaf.annotation import AnnotationDet
-from .fullcif_hr import FullCifDetHr
-from .fullcif_seeds import FullCifDetSeeds
+from .fullcifdet_hr import FullCifDetHr
+from .fullcifdet_seeds import FullCifDetSeeds
 from openpifpaf.decoder import nms
 from openpifpaf.decoder.occupancy import Occupancy
 from openpifpaf import headmeta, visualizer

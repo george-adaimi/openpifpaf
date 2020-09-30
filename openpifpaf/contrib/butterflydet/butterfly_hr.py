@@ -67,7 +67,8 @@ class ButterflyHr(CifHr):
         # Restrict this accumulation to 1sigma so that seeds for the same joint
         # are properly suppressed.
         if self.fullfields:
-            cifdet_nn = np.clip((w/stride)*(h/stride), a_min=1, a_max= None)
+            cifdet_nn = np.clip((w/stride)*(h/stride), a_min=16, a_max= None)
+            #cifdet_nn = 1
         else:
             cifdet_nn = self.neighbors
         scalar_square_add_2dgauss(
