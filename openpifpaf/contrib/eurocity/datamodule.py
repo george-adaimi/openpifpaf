@@ -7,7 +7,7 @@ import openpifpaf
 
 from .eurocity import EuroCity
 from .constants import BBOX_KEYPOINTS, BBOX_HFLIP
-from . import metric
+#from . import metric
 from ..butterflydet.fullbutterfly import FullButterfly
 
 class EuroCityModule(openpifpaf.datasets.DataModule):

@@ -20,7 +20,7 @@ class EuroCity(torch.utils.data.Dataset):
                  category_ids=None, rider_vehicles=False):
         self.annFile = ann_file
         self.root = image_dir
-        if not isinstance(time, tuple):
+        if not isinstance(time, list):
             imgFolder = self.root.format(time)
             self.gt_files = glob.glob(imgFolder + '/*/*' + '.png')
         else:
@@ -117,6 +117,7 @@ class EuroCity(torch.utils.data.Dataset):
                         "keypoints":[x, y, 2, x+w, y, 2, x+w, y+h, 2, x, y+h, 2, x+w/2, y+h/2, 2],
                         "iscrowd": 0,
                         "segmentation":[],
+                        'num_keypoints': 5
                     })
                 else:
                     if gt['identity'] in ("person-group-far-away",):
@@ -128,6 +129,7 @@ class EuroCity(torch.utils.data.Dataset):
                             "keypoints":[x, y, 2, x+w, y, 2, x+w, y+h, 2, x, y+h, 2, x+w/2, y+h/2, 2],
                             "iscrowd": 1,
                             "segmentation":[],
+                            'num_keypoints': 5
                         })
                     elif gt['identity'] in ("rider+vehicle-group-far-away",):
                         anns.append({
@@ -138,6 +140,7 @@ class EuroCity(torch.utils.data.Dataset):
                             "keypoints":[x, y, 2, x+w, y, 2, x+w, y+h, 2, x, y+h, 2, x+w/2, y+h/2, 2],
                             "iscrowd": 1,
                             "segmentation":[],
+                            'num_keypoints': 5
                         })
         # preprocess image and annotations
         image, anns, meta = self.preprocess(image, anns, None)
@@ -150,8 +153,6 @@ class EuroCity(torch.utils.data.Dataset):
         utils.mask_valid_area(image, valid_area)
         LOG.debug(meta)
         # transform targets
-        if self.target_transforms is not None:
-            anns = [t(image, anns, meta) for t in self.target_transforms]
 
         return image, anns, meta
     def __len__(self):
