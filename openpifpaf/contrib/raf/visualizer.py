@@ -16,34 +16,10 @@ class Raf(Base):
     show_confidences = False
     show_regressions = False
     fig_file = None
-    _meta = None
-
-    @staticmethod
-    def meta(meta):
-        if image is None:
-            Raf._meta = None
-            return
-
-        Raf._meta = meta
-
-    @classmethod
-    def processed_image(cls,image, meta=None):
-        if image is None:
-            Raf._processed_image = None
-            Raf._meta = meta
-            return
-
-        image = np.moveaxis(np.asarray(image), 0, -1)
-        image = np.clip(image / cls.processed_image_intensity_spread * 0.5 + 0.5, 0.0, 1.0)
-        Raf._processed_image = image
-        Raf._meta = meta
 
     def __init__(self, meta: headmeta.Raf):
         super().__init__(meta.name)
-
-        self.stride = meta.stride
-        self.obj_categories = meta.obj_categories
-        self.rel_categories = meta.rel_categories
+        self.meta = meta
         self.detection_painter = show.DetectionPainter(xy_scale=meta.stride)
 
     def targets(self, field, *, annotation_dicts):
@@ -51,16 +27,15 @@ class Raf(Base):
         #assert self.skeleton is not None
 
         annotations = [
-            AnnotationDet(self.obj_categories).set(ann['category_id'], None, ann['bbox'])
+            AnnotationDet(self.meta.obj_categories).set(ann['category_id'], None, ann['bbox'])
             for ann in annotation_dicts
         ]
-
-        self._confidences(field[0])
-        self._regressions(field[1], field[2], field[3], field[4], confidence_fields=field[0], annotations=annotations)
+        self._confidences(field[:, 0])
+        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 5], field[:, 6], confidence_fields=field[0], annotations=annotations)
 
     def predicted(self, field):
         self._confidences(field[:, 0])
-        self._regressions(field[:, 1:3], field[:, 5:7], field[:, 4], field[:, 8],
+        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 7], field[:, 8],
                           annotations=self._ground_truth,
                           confidence_fields=field[:, 0],
                           uv_is_offset=False)
@@ -76,7 +51,7 @@ class Raf(Base):
             #          self.keypoints[self.skeleton[f][1] - 1])
             fig_file = os.path.join(self.fig_file, "prediction_image.raf_c_"+str(f)+".jpg") if self.fig_file else None
             with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
-                ax.text(0, 0, '{}'.format(self.rel_categories[f]), fontsize=8, color='red')
+                ax.text(0, 0, '{}'.format(self.meta.rel_categories[f]), fontsize=8, color='red')
                 im = ax.imshow(self.scale_scalar(confidences[f], self.meta.stride),
                                alpha=0.9, vmin=0.0, vmax=1.0, cmap='Blues')
                 self.colorbar(ax, im)
@@ -96,7 +71,7 @@ class Raf(Base):
             fig_file = os.path.join(self.fig_file, "prediction_image.raf_reg_"+str(f)+".jpg") if self.fig_file else None
             with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
                 show.white_screen(ax, alpha=0.5)
-                ax.text(0, 0, '{}'.format(self.rel_categories[f]), fontsize=14, color='red')
+                ax.text(0, 0, '{}'.format(self.meta.rel_categories[f]), fontsize=14, color='red')
                 if annotations:
                     self.detection_painter.annotations(ax, annotations, color='lightgray')
                 q1 = show.quiver(ax,

@@ -71,7 +71,7 @@ class RafGenerator:
         self.fill(detections)
         fields = self.fields(valid_area)
 
-        self.visualizer.processed_image(image, meta)
+        self.visualizer.processed_image(image)
         self.visualizer.targets(fields, annotation_dicts=anns)
 
         return fields
