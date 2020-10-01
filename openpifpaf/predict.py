@@ -9,13 +9,15 @@ import os
 import PIL
 import torch
 
-from . import datasets, decoder, network, plugins, show, transforms, visualizer, __version__
+from . import datasets, decoder, logger, network, plugins, show, transforms, visualizer, __version__
 
 LOG = logging.getLogger(__name__)
 
 
 # pylint: disable=too-many-statements
 def cli():
+    plugins.register()
+
     parser = argparse.ArgumentParser(
         prog='python3 -m openpifpaf.predict',
         description=__doc__,
@@ -24,9 +26,9 @@ def cli():
     parser.add_argument('--version', action='version',
                         version='OpenPifPaf {version}'.format(version=__version__))
 
-    plugins.register()
-    network.cli(parser)
     decoder.cli(parser)
+    logger.cli(parser)
+    network.cli(parser)
     show.cli(parser)
     visualizer.cli(parser)
 
@@ -34,8 +36,6 @@ def cli():
                         help='input images')
     parser.add_argument('--glob',
                         help='glob expression for input images (for many images)')
-    parser.add_argument('--show', default=False, action='store_true',
-                        help='show image of output overlay')
     parser.add_argument('--image-output', default=None, nargs='?', const=True,
                         help='image output file or directory')
     parser.add_argument('--json-output', default=None, nargs='?', const=True,
@@ -51,31 +51,12 @@ def cli():
     parser.add_argument('--line-width', default=6, type=int,
                         help='line width for skeleton')
     parser.add_argument('--monocolor-connections', default=False, action='store_true')
-    parser.add_argument('--figure-width', default=10.0, type=float,
-                        help='figure width')
-    parser.add_argument('--dpi-factor', default=1.0, type=float,
-                        help='increase dpi of output image by this factor')
-    group = parser.add_argument_group('logging')
-    group.add_argument('-q', '--quiet', default=False, action='store_true',
-                       help='only show warning messages or above')
-    group.add_argument('--debug', default=False, action='store_true',
-                       help='print debug messages')
-    group.add_argument('--debug-images', default=False, action='store_true',
-                       help='print debug messages and enable all debug images')
     args = parser.parse_args()
 
     if args.debug_images:
         args.debug = True
 
-    log_level = logging.INFO
-    if args.quiet:
-        log_level = logging.WARNING
-    if args.debug:
-        log_level = logging.DEBUG
-    logging.basicConfig()
-    logging.getLogger('openpifpaf').setLevel(log_level)
-    LOG.setLevel(log_level)
-
+    logger.configure(args, LOG)  # logger first
     decoder.configure(args)
     network.configure(args)
     show.configure(args)
@@ -125,7 +106,7 @@ def preprocess_factory(args):
         assert args.long_edge, '--long-edge must be provided for batch size > 1'
         preprocess.append(transforms.CenterPad(args.long_edge))
     else:
-        preprocess.append(transforms.CenterPadTight(32))
+        preprocess.append(transforms.CenterPadTight(16))
     return transforms.Compose(preprocess + [transforms.EVAL_TRANSFORM])
 
 
@@ -202,11 +183,7 @@ def main():
                 image_out_name = out_name(
                     args.image_output, meta['file_name'], '.predictions.png')
                 LOG.debug('image output = %s', image_out_name)
-                with show.image_canvas(cpu_image,
-                                       image_out_name,
-                                       show=args.show,
-                                       fig_width=args.figure_width,
-                                       dpi_factor=args.dpi_factor) as ax:
+                with show.image_canvas(cpu_image, image_out_name) as ax:
                     annotation_painter.annotations(ax, pred)
 
 
