@@ -83,7 +83,7 @@ class VisDrone(Base):
         self.predictions[image_meta['file_name'][:-4]+'.txt'] = np.asarray(image_annotations)
 
 
-    def write_predictions(self, filename):
+    def write_predictions(self, filename, additional_data=None):
         mkdir_if_missing(filename)
         for imageName in self.predictions.keys():
             with open(os.path.join(filename,imageName), "w") as file:
@@ -94,6 +94,12 @@ class VisDrone(Base):
             for imageName in self.predictions.keys():
                 myzip.write(os.path.join(filename,imageName))
         LOG.info('wrote %s.zip', os.path.join(filename,'predictions')+ '.zip')
+
+        if additional_data:
+            with open(os.path.join(filename, 'predictions.pred_meta.json'), 'w') as f:
+                json.dump(additional_data, f)
+            LOG.info('wrote %s.pred_meta.json', filename)
+
 
     def stats(self):
         allgt, alldet = self.gt_ignoreCleaning(self.gt, self.predictions)
