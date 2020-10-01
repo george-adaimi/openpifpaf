@@ -71,7 +71,7 @@ def evaluate(difficulty, ignore_other_vru, data, use_cache, eval_type='pedestria
     filename = 'lamr_ignore={}_difficulty={}_evaltype={}'.format(ignore_other_vru, difficulty,
                                                                  eval_type)
 
-    return {'mr_fppi': mr_fppi.log_avg_mr_reference_implementation()}
+
     #fig.savefig(os.path.join(results_path, '{}.pdf'.format(filename)))  # vector graphic
     #fig.savefig(os.path.join(results_path, '{}.png'.format(filename)))  # png
 
@@ -93,14 +93,23 @@ def evaluate(difficulty, ignore_other_vru, data, use_cache, eval_type='pedestria
     # print '# ----------------------------------------------------------------- #'
     # print ''
 
+    return {'mr_fppi': mr_fppi.log_avg_mr_reference_implementation(),
+            'ignored_gt': len(result.gts_including_ignored) - len(result.gts),
+            'skipped_gt': result.skipped_gts['count'],
+            'skipped_dets': result.skipped_dets['count'],
+            'proc_frames': result.nof_imgs,
+            'classes_skipped_gt': list(result.skipped_gts['types']),
+            'classes_skipped_dets': list(result.skipped_dets['types']),}
+
 
 def evaluate_detection(data, eval_type='pedestrian'):
-    results = lambda: defaultdict(tree)
+    nested_results = lambda: defaultdict(nested_results)
+    results = nested_results()
     for difficulty in ['reasonable', 'small', 'occluded', 'all']:
         # False is the default case used by the benchmark server,
         # use [True, False] if you want to compare the enforce with the ignore setting
         for ignore_other_vru in [True, False]:
-            results[difficulty][str(ignore_other_vru).lowercase()] = evaluate(difficulty, ignore_other_vru, data,
+            results[difficulty][str(ignore_other_vru).lower()] = evaluate(difficulty, ignore_other_vru, data,
                      use_cache=False, eval_type=eval_type)
 
     return results
