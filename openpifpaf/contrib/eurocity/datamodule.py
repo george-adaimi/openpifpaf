@@ -7,7 +7,7 @@ import openpifpaf
 
 from .eurocity import EuroCity
 from .constants import BBOX_KEYPOINTS, BBOX_HFLIP
-#from . import metric
+from . import metric
 from ..butterflydet.fullbutterfly import FullButterfly
 
 class EuroCityModule(openpifpaf.datasets.DataModule):
@@ -262,8 +262,9 @@ class EuroCityModule(openpifpaf.datasets.DataModule):
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=False,
             collate_fn=openpifpaf.datasets.collate_images_anns_meta)
 
-    # def metrics(self):
-    #     return [metric.EuroCity(
-    #         self.eval_annotations,
-    #         self.eval_image_dir,
-    #     )]
+    def metrics(self):
+        return [metric.EuroCity(
+            self.eval_annotations,
+            self.eval_image_dir,
+            self.time
+        )]
