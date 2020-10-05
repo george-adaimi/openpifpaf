@@ -5,23 +5,24 @@ import torchvision
 
 import openpifpaf
 
-from .uavdt import UAVDT
+from .eurocity import EuroCity
 from .constants import BBOX_KEYPOINTS, BBOX_HFLIP
 from . import metric
+from ..butterflydet.fullbutterfly import FullButterfly
 
-class UAVDTModule(openpifpaf.datasets.DataModule):
-    train_image_dir = "data/UAV-benchmark-M/train/"
-    val_image_dir = "data/UAV-benchmark-M/test/"
+class EuroCityModule(openpifpaf.datasets.DataModule):
+    train_image_dir = "./data/ECP/{}/img/train"
+    val_image_dir = "./data/ECP/{}/img/val"
     eval_image_dir = val_image_dir
-    train_annotations = "data/UAV-benchmark-M/GT/"
-    val_annotations = "data/UAV-benchmark-M/GT/"
+    train_annotations = "./data/ECP/{}/labels/train"
+    val_annotations = "./data/ECP/{}/labels/val"
     eval_annotations = val_annotations
 
     debug = False
     pin_memory = False
 
     n_images = None
-    square_edge = 512
+    square_edge = 513
     extended_scale = False
     orientation_invariant = 0.0
     augmentation = True
@@ -31,78 +32,94 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
     eval_long_edge = None
     eval_orientation_invariant = 0.0
     eval_extended_scale = False
+    categories = ['pedestrian', 'rider']
+    extra_categories = ['scooter', 'motorbike', 'bicycle', 'buggy', 'wheelchair', 'tricycle']
 
+    full_butterfly = False
+    rider_vehicles = False
+    time = ['day', 'night']
     def __init__(self):
         super().__init__()
 
-        self.categories = ("vehicle")
-        cifdet = openpifpaf.headmeta.CifDet('cifdet', 'uavdt', self.categories)
+        if self.rider_vehicles:
+            self.categories += extra_categories
+        cifdet = openpifpaf.headmeta.CifDet('cifdet', 'eurocity', self.categories)
         cifdet.upsample_stride = self.upsample_stride
         self.head_metas = [cifdet,]
 
 
     @classmethod
     def cli(cls, parser: argparse.ArgumentParser):
-        group = parser.add_argument_group('data module UAVDT')
+        group = parser.add_argument_group('data module EuroCity')
 
-        group.add_argument('--uavdt-train-annotations',
+        group.add_argument('--eurocity-train-annotations',
                            default=cls.train_annotations)
-        group.add_argument('--uavdt-val-annotations',
+        group.add_argument('--eurocity-val-annotations',
                            default=cls.val_annotations)
-        group.add_argument('--uavdt-train-image-dir',
+        group.add_argument('--eurocity-train-image-dir',
                            default=cls.train_image_dir)
-        group.add_argument('--uavdt-val-image-dir',
+        group.add_argument('--eurocity-val-image-dir',
                            default=cls.val_image_dir)
 
-        group.add_argument('--uavdt-n-images',
+        group.add_argument('--eurocity-n-images',
                            default=cls.n_images, type=int,
                            help='number of images to sample')
-        group.add_argument('--uavdt-square-edge',
+        group.add_argument('--eurocity-square-edge',
                            default=cls.square_edge, type=int,
                            help='square edge of input images')
         assert not cls.extended_scale
-        group.add_argument('--uavdt-extended-scale',
+        group.add_argument('--eurocity-extended-scale',
                            default=False, action='store_true',
                            help='augment with an extended scale range')
-        group.add_argument('--uavdt-orientation-invariant',
+        group.add_argument('--eurocity-orientation-invariant',
                            default=cls.orientation_invariant, type=float,
                            help='augment with random orientations')
         assert cls.augmentation
-        group.add_argument('--uavdt-no-augmentation',
-                           dest='uavdt_augmentation',
+        group.add_argument('--eurocity-no-augmentation',
+                           dest='eurocity_augmentation',
                            default=True, action='store_false',
                            help='do not apply data augmentation')
-        group.add_argument('--uavdt-rescale-images',
+        group.add_argument('--eurocity-rescale-images',
                            default=cls.rescale_images, type=float,
                            help='overall rescale factor for images')
 
-        group.add_argument('--uavdt-upsample',
+        group.add_argument('--eurocity-upsample',
                            default=cls.upsample_stride, type=int,
                            help='head upsample stride')
-        group.add_argument('--upsample-full-butterfly',
+        group.add_argument('--eurocity-full-butterfly',
                            default=False, action='store_true',
                            help='use full butterfly')
-
+        group.add_argument('--eurocity-rider-vehicles',
+                           default=False, action='store_true',
+                           help='detect vehicles of riders')
+        group.add_argument('--eurocity-time', type=str, action='store',
+                           choices=['day', 'night', 'both'],
+                           default='both',
+                           help='time to use (day or night)')
     @classmethod
     def configure(cls, args: argparse.Namespace):
         # extract global information
         cls.debug = args.debug
         cls.pin_memory = args.pin_memory
 
-        # uavdt specific
-        cls.train_annotations = args.uavdt_train_annotations
-        cls.val_annotations = args.uavdt_val_annotations
-        cls.train_image_dir = args.uavdt_train_image_dir
-        cls.val_image_dir = args.uavdt_val_image_dir
+        # eurocity specific
+        cls.train_annotations = args.eurocity_train_annotations
+        cls.val_annotations = args.eurocity_val_annotations
+        cls.train_image_dir = args.eurocity_train_image_dir
+        cls.val_image_dir = args.eurocity_val_image_dir
 
-        cls.n_images = args.uavdt_n_images
-        cls.square_edge = args.uavdt_square_edge
-        cls.extended_scale = args.uavdt_extended_scale
-        cls.orientation_invariant = args.uavdt_orientation_invariant
-        cls.augmentation = args.uavdt_augmentation
-        cls.rescale_images = args.uavdt_rescale_images
-        cls.upsample_stride = args.uavdt_upsample
-        cls.full_butterfly = args.upsample_full_butterfly
+        cls.n_images = args.eurocity_n_images
+        cls.square_edge = args.eurocity_square_edge
+        cls.extended_scale = args.eurocity_extended_scale
+        cls.orientation_invariant = args.eurocity_orientation_invariant
+        cls.augmentation = args.eurocity_augmentation
+        cls.rescale_images = args.eurocity_rescale_images
+        cls.upsample_stride = args.eurocity_upsample
+        cls.full_butterfly = args.eurocity_full_butterfly
+        cls.rider_vehicles = args.eurocity_rider_vehicles
+        cls.time = [args.eurocity_time]
+        if args.eurocity_time == 'both':
+            cls.time = ['day', 'night']
 
     @staticmethod
     def _convert_data(parent_data, meta):
@@ -162,11 +179,13 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
         ])
 
     def train_loader(self):
-        train_data = UAVDT(
+        train_data = EuroCity(
             image_dir=self.train_image_dir,
             ann_file=self.train_annotations,
+            time = self.time,
             preprocess=self._preprocess(),
             n_images=self.n_images,
+            rider_vehicles=self.rider_vehicles,
         )
         return torch.utils.data.DataLoader(
             train_data, batch_size=self.batch_size, shuffle=not self.debug,
@@ -174,11 +193,13 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
             collate_fn=openpifpaf.datasets.collate_images_targets_meta)
 
     def val_loader(self):
-        val_data = UAVDT(
+        val_data = EuroCity(
             image_dir=self.val_image_dir,
             ann_file=self.val_annotations,
+            time = self.time,
             preprocess=self._preprocess(),
             n_images=self.n_images,
+            rider_vehicles=self.rider_vehicles,
         )
 
         return torch.utils.data.DataLoader(
@@ -194,12 +215,11 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
                     openpifpaf.transforms.RescaleAbsolute(self.eval_long_edge),
                     openpifpaf.transforms.RescaleAbsolute((self.eval_long_edge) // 2),
                 ], salt=1)
-
         elif self.eval_long_edge:
             rescale_t = openpifpaf.transforms.RescaleAbsolute(self.eval_long_edge)
-
+        padding_t = None
         if self.batch_size == 1:
-            #padding_t = [openpifpaf.transforms.CenterPadTight(16)]
+            #padding_t = openpifpaf.transforms.CenterPadTight(16)
             padding_t = openpifpaf.transforms.CenterPadTight(32)
         else:
             assert self.eval_long_edge
@@ -227,11 +247,13 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
         ])
 
     def eval_loader(self):
-        eval_data = UAVDT(
+        eval_data = EuroCity(
             image_dir=self.eval_image_dir,
             ann_file=self.eval_annotations,
+            time = self.time,
             preprocess=self._eval_preprocess(),
             n_images=self.n_images,
+            rider_vehicles=self.rider_vehicles,
             category_ids=[],
         )
 
@@ -241,7 +263,8 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
             collate_fn=openpifpaf.datasets.collate_images_anns_meta)
 
     def metrics(self):
-        return [metric.UAVDT(
+        return [metric.EuroCity(
             self.eval_annotations,
             self.eval_image_dir,
+            self.time
         )]

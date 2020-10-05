@@ -6,8 +6,6 @@ import datetime
 import json
 import logging
 from pprint import pprint
-import socket
-import sys
 
 import numpy as np
 import pysparkling
@@ -20,33 +18,6 @@ except ImportError:
     matplotlib = None
 
 LOG = logging.getLogger(__name__)
-
-
-def cli(parser):
-    group = parser.add_argument_group('logging')
-    group.add_argument('--debug', default=False, action='store_true',
-                       help='print debug messages')
-
-
-def configure(args):
-    # pylint: disable=import-outside-toplevel
-    from pythonjsonlogger import jsonlogger
-
-    file_handler = logging.FileHandler(args.output + '.log', mode='w')
-    file_handler.setFormatter(
-        jsonlogger.JsonFormatter('%(message) %(levelname) %(name) %(asctime)'))
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    logging.basicConfig(handlers=[stdout_handler, file_handler])
-    log_level = logging.INFO if not args.debug else logging.DEBUG
-    logging.getLogger('openpifpaf').setLevel(log_level)
-    LOG.info({
-        'type': 'process',
-        'argv': sys.argv,
-        'args': vars(args),
-        'version': __version__,
-        'hostname': socket.gethostname(),
-    })
-    return log_level
 
 
 def optionally_shaded(ax, x, y, *, color, label, **kwargs):
@@ -234,15 +205,21 @@ class Plots():
         #     ax.set_yscale('log', nonposy='clip')
         ax.grid(linestyle='dotted')
         # ax.legend(loc='upper right')
+        ax.text(0.01, 1.01, 'train (cross-dotted), val (dot-solid)',
+                transform=ax.transAxes, size='x-small')
 
     def preprocess_time(self, ax):
         for color_i, (data, label) in enumerate(zip(self.datas, self.labels)):
             color = matplotlib.cm.get_cmap('tab10')((color_i % 10 + 0.05) / 10)
 
             if 'train' in data:
-                x = np.array([fractional_epoch(row) for row in data['train']])
+                # skip batch 0 as it has corrupted data_time
+                x = np.array([fractional_epoch(row)
+                              for row in data['train']
+                              if row.get('batch', 1) > 0])
                 y = np.array([row.get('data_time') / row.get('time') * 100.0
-                              for row in data['train']], dtype=np.float)
+                              for row in data['train']
+                              if row.get('batch', 1) > 0], dtype=np.float)
                 stride = int(len(x) / (x[-1] - x[0]) / 30.0)  # 30 per epoch
                 if stride > 5 and len(x) / stride > 2:
                     x_binned = np.array([x[i] for i in range(0, len(x), stride)][:-1])
@@ -366,7 +343,7 @@ class Plots():
             self.lr(ax)
 
         with show.canvas(nrows=n_rows, ncols=n_cols, squeeze=False,
-                         figsize=multi_figsize, dpi=50,
+                         figsize=multi_figsize,
                          sharey=self.share_y, sharex=True) as axs:
             for row_i, row in enumerate(rows.values()):
                 for col_i, field_name in enumerate(row):
@@ -379,7 +356,7 @@ class Plots():
             self.preprocess_time(ax)
 
         with show.canvas(nrows=n_rows, ncols=n_cols, squeeze=False,
-                         figsize=multi_figsize, dpi=50,
+                         figsize=multi_figsize,
                          sharey=self.share_y, sharex=True) as axs:
             for row_i, row in enumerate(rows.values()):
                 for col_i, field_name in enumerate(row):
@@ -387,7 +364,7 @@ class Plots():
 
         if show_mtl_sigmas:
             with show.canvas(nrows=n_rows, ncols=n_cols, squeeze=False,
-                             figsize=multi_figsize, dpi=50,
+                             figsize=multi_figsize,
                              sharey=self.share_y, sharex=True) as axs:
                 for row_i, row in enumerate(rows.values()):
                     for col_i, field_name in enumerate(row):
@@ -582,6 +559,8 @@ def main():
     parser.add_argument('--version', action='version',
                         version='OpenPifPaf {version}'.format(version=__version__))
 
+    show.cli(parser)
+
     parser.add_argument('log_file', nargs='+',
                         help='path to log file(s)')
     parser.add_argument('--label', nargs='+',
@@ -597,6 +576,8 @@ def main():
                         help='output prefix (default is log_file + .)')
     parser.add_argument('--show-mtl-sigmas', default=False, action='store_true')
     args = parser.parse_args()
+
+    show.configure(args)
 
     if args.output is None:
         args.output = args.log_file[-1] + '.'
