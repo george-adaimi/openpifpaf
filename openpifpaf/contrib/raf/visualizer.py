@@ -31,7 +31,7 @@ class Raf(Base):
             for ann in annotation_dicts
         ]
         self._confidences(field[:, 0])
-        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 5], field[:, 6], confidence_fields=field[0], annotations=annotations)
+        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 5], field[:, 6], confidence_fields=field[:, 0], annotations=annotations)
 
     def predicted(self, field):
         self._confidences(field[:, 0])
@@ -43,7 +43,7 @@ class Raf(Base):
     def _confidences(self, confidences):
         if not self.show_confidences:
             return
-        indices = np.arange(confidences.shape[0])[np.nanmax(confidences, axis=(1,2))>0.3]
+        indices = np.arange(confidences.shape[0])[np.nanmax(confidences, axis=(1,2))>0.1]
 
         for f in indices:
             #LOG.debug('%s,%s',
@@ -61,7 +61,7 @@ class Raf(Base):
                      annotations=None, confidence_fields=None, uv_is_offset=True):
         if not self.show_regressions:
             return
-        indices = np.arange(confidence_fields.shape[0])[np.nanmax(confidence_fields, axis=(1,2))>0.3]
+        indices = np.arange(confidence_fields.shape[0])[np.nanmax(confidence_fields, axis=(1,2))>0.1]
         for f in indices:
             #LOG.debug('%s,%s',
             #          self.keypoints[self.skeleton[f][0] - 1],
