@@ -4,6 +4,7 @@ import numpy as np
 import zipfile
 from tqdm import tqdm
 from PIL import Image
+import json
 
 from openpifpaf.metric.base import Base
 from uavdteval import CalculateDetectionPR_overall2, CalculateDetectionPR_seq2

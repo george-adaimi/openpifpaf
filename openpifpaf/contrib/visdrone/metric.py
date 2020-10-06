@@ -2,6 +2,7 @@ import logging
 import os
 import numpy as np
 import zipfile
+import json
 from tqdm import tqdm
 from PIL import Image
 
