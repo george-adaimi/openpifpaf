@@ -102,10 +102,11 @@ class EuroCity(Base):
         self.image_ids = []
         self.no_dets = []
         self.gt = {}
-        self.mode = gt_dir.split("/")[-1]
+        self.mode = img_dir.split("/")[-1]
         for time in times:
             self.predictions[time] = {}
-            self.gt[time] = self.load_data_ecp(gt_dir.format(time))
+            if gt_dir:
+                self.gt[time] = self.load_data_ecp(gt_dir.format(time))
         #self.categories = categories
 
 
@@ -145,11 +146,11 @@ class EuroCity(Base):
                 with open(os.path.join(filename, time, self.mode, imageName), "w") as file:
                     json.dump(self.predictions[time][imageName], file)
 
-        LOG.info('wrote predictions to %s', filename)
-        with zipfile.ZipFile(os.path.join(filename,'predictions')+ '.zip', 'w') as myzip:
-            for imageName in self.predictions.keys():
-                myzip.write(os.path.join(filename,imageName))
-        LOG.info('wrote %s.zip', os.path.join(filename,'predictions')+ '.zip')
+            LOG.info('wrote predictions to %s', filename)
+            with zipfile.ZipFile(os.path.join(filename,'predictions_{}'.format(time))+ '.zip', 'w') as myzip:
+                for imageName in self.predictions[time].keys():
+                    myzip.write(os.path.join(filename,imageName))
+            LOG.info('wrote %s.zip', os.path.join(filename,'predictions_{}'.format(time))+ '.zip')
 
         if additional_data:
             with open(os.path.join(filename, 'predictions.pred_meta.json'), 'w') as f:
@@ -157,12 +158,14 @@ class EuroCity(Base):
             LOG.info('wrote %s.pred_meta.json', filename)
 
     def stats(self):
+        if self.gt:
+            return {}
         data = []
         for time in self.predictions.keys():
             for key, item in self.predictions[time].items():
                 data.append({'gt': self.gt[time][key], 'det': item})
-            results_pedestrian = evaluate_detection(data, eval_type='pedestrian')
-            results_rider = evaluate_detection(data, eval_type='rider')
+            results_pedestrian = evaluate_detection(data.copy(), eval_type='pedestrian')
+            results_rider = evaluate_detection(data.copy(), eval_type='rider')
 
             stats = []
             text_labels = []
