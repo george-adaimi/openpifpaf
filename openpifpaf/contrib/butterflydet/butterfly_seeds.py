@@ -3,6 +3,7 @@ import time
 
 from openpifpaf.functional import scalar_values
 from openpifpaf.decoder import CifSeeds
+from openpifpaf.decoder.utils import index_field
 from openpifpaf import headmeta
 
 LOG = logging.getLogger(__name__)
@@ -31,6 +32,24 @@ class ButterflySeeds(CifSeeds):
             v = v[m]
             w = w[m]
             h = h[m]
+
+            for vv, xx, yy, ww, hh in zip(v, x, y, w, h):
+                self.seeds.append((vv, field_i, xx, yy, ww, hh))
+
+        LOG.debug('seeds %d, %.3fs', len(self.seeds), time.perf_counter() - start)
+        return self
+
+    def fill_single_hr(self, all_fields, meta: headmeta.CifDet):
+        start = time.perf_counter()
+
+        cif = all_fields[meta.head_index]
+        for field_i, p in enumerate(zip(self.cifhr.accumulated, self.cifhr.widths, self.cifhr.heights)):
+            xy = index_field(p[0].shape)
+            if self.score_scale != 1.0:
+                p[0] = p[0] * self.score_scale
+            m = p[0] > self.threshold
+
+            v, x, y, w, h = p[0][m], xy[0, m], xy[1, m], p[1][m], p[2][m]
 
             for vv, xx, yy, ww, hh in zip(v, x, y, w, h):
                 self.seeds.append((vv, field_i, xx, yy, ww, hh))
