@@ -318,5 +318,5 @@ class CocoDetKp(DataModule):
         metric.Coco(
         pycocotools.coco.COCO(self.eval_annotations),
         max_per_image=100,
-        category_ids=[],
+        category_ids=[1],
         iou_type='bbox')]
