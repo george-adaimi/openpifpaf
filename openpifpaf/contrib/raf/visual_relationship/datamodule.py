@@ -41,7 +41,7 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
         raf.upsample_stride = self.upsample_stride
         cifdet = openpifpaf.headmeta.CifDet('cifdet', 'visual_relationship', self.obj_categories)
         cifdet.upsample_stride = self.upsample_stride
-        self.head_metas = [raf,cifdet]
+        self.head_metas = [cifdet, raf]
 
 
     @classmethod
@@ -115,8 +115,8 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
         return image, anns, meta
 
     def _preprocess(self):
-        encoders = (Raf(self.head_metas[0]),
-              openpifpaf.encoder.CifDet(self.head_metas[1]))
+        encoders = (openpifpaf.encoder.CifDet(self.head_metas[0]),
+                    Raf(self.head_metas[1]),)
 
         if not self.augmentation:
             return openpifpaf.transforms.Compose([

@@ -12,9 +12,9 @@ LOG = logging.getLogger(__name__)
 
 class Raf(Base):
     show_margin = False
-    show_background = False
-    show_confidences = False
-    show_regressions = False
+    show_background = True
+    show_confidences = True
+    show_regressions = True
     fig_file = None
 
     def __init__(self, meta: headmeta.Raf):
@@ -31,7 +31,7 @@ class Raf(Base):
             for ann in annotation_dicts
         ]
         self._confidences(field[:, 0])
-        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 5], field[:, 6], confidence_fields=field[0], annotations=annotations)
+        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 5], field[:, 6], confidence_fields=field[:,0], annotations=annotations)
 
     def predicted(self, field):
         self._confidences(field[:, 0])
@@ -49,8 +49,8 @@ class Raf(Base):
             #LOG.debug('%s,%s',
             #          self.keypoints[self.skeleton[f][0] - 1],
             #          self.keypoints[self.skeleton[f][1] - 1])
-            fig_file = os.path.join(self.fig_file, "prediction_image.raf_c_"+str(f)+".jpg") if self.fig_file else None
-            with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
+            #fig_file = os.path.join(self.fig_file, "prediction_image.raf_c_"+str(f)+".jpg") if self.fig_file else None
+            with self.image_canvas(self._processed_image) as ax:
                 ax.text(0, 0, '{}'.format(self.meta.rel_categories[f]), fontsize=8, color='red')
                 im = ax.imshow(self.scale_scalar(confidences[f], self.meta.stride),
                                alpha=0.9, vmin=0.0, vmax=1.0, cmap='Blues')
@@ -68,8 +68,8 @@ class Raf(Base):
             #          self.keypoints[self.skeleton[f][1] - 1])
 
             confidence_field = confidence_fields[f] if confidence_fields is not None else None
-            fig_file = os.path.join(self.fig_file, "prediction_image.raf_reg_"+str(f)+".jpg") if self.fig_file else None
-            with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
+            #fig_file = os.path.join(self.fig_file, "prediction_image.raf_reg_"+str(f)+".jpg") if self.fig_file else None
+            with self.image_canvas(self._processed_image) as ax:
                 show.white_screen(ax, alpha=0.5)
                 ax.text(0, 0, '{}'.format(self.meta.rel_categories[f]), fontsize=14, color='red')
                 if annotations:
