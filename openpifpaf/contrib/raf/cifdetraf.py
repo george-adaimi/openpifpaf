@@ -35,8 +35,8 @@ class CifDetRaf(Generator):
     nms = True
 
     def __init__(self,
-                raf_metas: List[Raf],
                 cifdet_metas: List[headmeta.CifDet],
+                raf_metas: List[Raf],
                 *,
                 cifdet_visualizers=None,
                 raf_visualizers=None):
@@ -70,8 +70,8 @@ class CifDetRaf(Generator):
         return [
             CifDetRaf([meta], [meta_next])
             for meta, meta_next in zip(head_metas[:-1], head_metas[1:])
-            if (isinstance(meta, Raf)
-                and isinstance(meta_next, headmeta.CifDet))
+            if (isinstance(meta, headmeta.CifDet)
+                and isinstance(meta_next, Raf))
         ]
     @classmethod
     def configure(cls, args: argparse.Namespace):
