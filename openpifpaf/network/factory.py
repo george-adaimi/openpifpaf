@@ -1,6 +1,7 @@
 import logging
 import os
 from typing import Tuple
+import warnings
 
 import torch
 import torchvision
@@ -69,7 +70,6 @@ def factory_from_args(args, *, head_metas=None):
         checkpoint=args.checkpoint,
         base_name=args.basenet,
         head_metas=head_metas,
-        dense_coupling=args.dense_coupling,
         cross_talk=args.cross_talk,
         two_scale=args.two_scale,
         multi_scale=args.multi_scale,
@@ -112,7 +112,6 @@ def factory(
         checkpoint=None,
         base_name=None,
         head_metas=None,
-        dense_coupling=0.0,
         cross_talk=0.0,
         two_scale=False,
         multi_scale=False,
@@ -142,13 +141,16 @@ def factory(
             )
         checkpoint = CHECKPOINT_URLS.get(checkpoint, checkpoint)
 
-        if checkpoint.startswith('http'):
-            checkpoint = torch.hub.load_state_dict_from_url(
-                checkpoint,
-                check_hash=not checkpoint.startswith('https'),
-                progress=download_progress)
-        else:
-            checkpoint = torch.load(checkpoint)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=torch.serialization.SourceChangeWarning)
+
+            if checkpoint.startswith('http'):
+                checkpoint = torch.hub.load_state_dict_from_url(
+                    checkpoint,
+                    check_hash=not checkpoint.startswith('https'),
+                    progress=download_progress)
+            else:
+                checkpoint = torch.load(checkpoint)
 
         net_cpu: nets.Shell = checkpoint['model']
         epoch = checkpoint['epoch']
@@ -196,17 +198,6 @@ def factory(
         # initialize for eval
         net_cpu.eval()
 
-    if dense_coupling and not multi_scale:
-        dcaf_meta = net_cpu.head_nets[2].meta
-        dcaf_meta.decoder_confidence_scales = [dense_coupling for _ in dcaf_meta.skeleton]
-        concatenated_caf = heads.CafConcatenate(
-            (net_cpu.head_nets[1], net_cpu.head_nets[2]))
-        net_cpu.set_head_nets([net_cpu.head_nets[0], concatenated_caf])
-    elif dense_coupling and multi_scale:
-        # TODO: fix multi-scale
-        # cif_indices = [v * 3 + 1 for v in range(10)]
-        # caf_indices = [v * 3 + 2 for v in range(10)]
-        raise NotImplementedError
     if cross_talk:
         net_cpu.process_input = nets.CrossTalk(cross_talk)
 
@@ -266,8 +257,6 @@ def cli(parser):
     group.add_argument('--no-download-progress', dest='download_progress',
                        default=True, action='store_false',
                        help='suppress model download progress bar')
-    group.add_argument('--dense-coupling', default=0.0, type=float,
-                       help='dense coupling')
     group.add_argument('--head-consolidation',
                        choices=('keep', 'create', 'filter_and_extend'),
                        default='filter_and_extend',

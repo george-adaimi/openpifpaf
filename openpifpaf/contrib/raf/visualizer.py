@@ -12,9 +12,9 @@ LOG = logging.getLogger(__name__)
 
 class Raf(Base):
     show_margin = False
-    show_background = True
-    show_confidences = True
-    show_regressions = True
+    show_background = False
+    show_confidences = False
+    show_regressions = False
     fig_file = None
 
     def __init__(self, meta: headmeta.Raf):

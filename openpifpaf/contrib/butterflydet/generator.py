@@ -3,18 +3,17 @@ import logging
 import time
 from typing import List
 
-from openpifpaf.decoder.generator import Generator
+from openpifpaf.decoder import Decoder
 from openpifpaf.annotation import AnnotationDet
 from .butterfly_hr import ButterflyHr
 from .butterfly_seeds import ButterflySeeds
-from openpifpaf.decoder import nms
-from openpifpaf.decoder.occupancy import Occupancy
+from openpifpaf.decoder import utils
 from openpifpaf import headmeta, visualizer
 
 LOG = logging.getLogger(__name__)
 
 
-class ButterflyDet(Generator):
+class ButterflyDet(Decoder):
     occupancy_visualizer = visualizer.Occupancy()
 
     def __init__(self, head_metas: List[headmeta.CifDet], *, visualizers=None):
@@ -45,7 +44,7 @@ class ButterflyDet(Generator):
 
         cifhr = ButterflyHr().fill(fields, self.metas)
         seeds = ButterflySeeds(cifhr).fill(fields, self.metas)
-        occupied = Occupancy(cifhr.accumulated.shape, 2, min_scale=2.0)
+        occupied = utils.Occupancy(cifhr.accumulated.shape, 2, min_scale=2.0)
 
         annotations = []
         for v, f, x, y, w, h in seeds.get():
@@ -58,8 +57,8 @@ class ButterflyDet(Generator):
 
         self.occupancy_visualizer.predicted(occupied)
 
-        annotations = nms.Detection().annotations_per_category(annotations, nms_type='snms')
-        #annotations = nms.Detection().annotations(annotations)
+        annotations = utils.nms.Detection().annotations_per_category(annotations, nms_type='snms')
+        #annotations = utils.nms.Detection().annotations(annotations)
         # annotations = sorted(annotations, key=lambda a: -a.score)
 
         LOG.info('annotations %d, decoder = %.3fs', len(annotations), time.perf_counter() - start)

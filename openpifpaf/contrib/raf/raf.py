@@ -7,7 +7,6 @@ from typing import ClassVar
 from math import sqrt
 
 from .annrescaler import AnnRescalerRel
-from openpifpaf.encoder.cifdet import CifDetGenerator
 from .visualizer import Raf as RafVisualizer
 from openpifpaf.utils import create_sink, mask_valid_area
 from . import headmeta

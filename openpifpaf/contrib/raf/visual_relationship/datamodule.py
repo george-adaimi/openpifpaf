@@ -124,7 +124,7 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
                 openpifpaf.transforms.RescaleAbsolute(self.square_edge),
                 openpifpaf.transforms.CenterPad(self.square_edge),
                 openpifpaf.transforms.EVAL_TRANSFORM,
-                openpifpaf.transforms.Encoders([encoders]),
+                openpifpaf.transforms.Encoders(encoders),
             ])
 
         if self.extended_scale:
@@ -166,7 +166,7 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
             n_images=self.n_images,
         )
         return torch.utils.data.DataLoader(
-            train_data, batch_size=self.batch_size, shuffle=not self.debug,
+            train_data, batch_size=self.batch_size, shuffle=not self.debug and self.augmentation,
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=True,
             collate_fn=openpifpaf.datasets.collate_images_targets_meta)
 

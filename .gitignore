@@ -2,6 +2,8 @@
 .DS_Store
 .vscode
 *.so
+.idea
+openpifpaf/.idea
 
 # Python
 build/
@@ -30,6 +32,7 @@ data-*/
 data_*/
 docs-private/
 data-mscoco
+data/
 *debug.png
 *.pl
 *.pl-*
@@ -40,6 +43,7 @@ data-mscoco
 *.log
 *.zip
 outputs/
+all-images/
 shared/
 decoder.prof
 decoder_flame.svg

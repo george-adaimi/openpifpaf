@@ -2,12 +2,12 @@ import logging
 import time
 
 from openpifpaf.functional import scalar_values
-from openpifpaf.decoder import CifSeeds
+from openpifpaf.decoder import utils
 from openpifpaf import headmeta
 
 LOG = logging.getLogger(__name__)
 
-class ButterflySeeds(CifSeeds):
+class ButterflySeeds(utils.CifSeeds):
     def fill_single(self, all_fields, meta: headmeta.CifDet):
         start = time.perf_counter()
 

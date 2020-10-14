@@ -9,20 +9,15 @@ import heapq
 import numpy as np
 
 from openpifpaf.annotation import AnnotationDet
-from openpifpaf.decoder.cif_hr import CifDetHr
-from openpifpaf.decoder.cif_seeds import CifDetSeeds
 from .raf_scored import RafScored
-from openpifpaf.decoder.generator import Generator
-from openpifpaf.decoder import nms as nms_module
-from openpifpaf.decoder.occupancy import Occupancy
+from openpifpaf.decoder import Decoder, utils
 from .headmeta import Raf
 from openpifpaf import headmeta,visualizer
 from . import visualizer as visualizer_raf
-from openpifpaf.decoder.generator import Generator
 
 LOG = logging.getLogger(__name__)
 
-class CifDetRaf(Generator):
+class CifDetRaf(Decoder):
     """Generate CifDetRaf from fields.
 
     :param: nms: set to None to switch off non-maximum suppression.
@@ -52,7 +47,7 @@ class CifDetRaf(Generator):
             self.raf_visualizers = [visualizer_raf.Raf(meta) for meta in raf_metas]
 
         if self.nms is True:
-            self.nms = nms_module.Detection()
+            self.nms = utils.nms.Detection()
 
 
         self.confidence_scales = raf_metas[0].decoder_confidence_scales
@@ -94,12 +89,12 @@ class CifDetRaf(Generator):
         for vis, meta in zip(self.raf_visualizers, self.raf_metas):
             vis.predicted(fields[meta.head_index])
 
-        cifdethr = CifDetHr().fill(fields, self.cifdet_metas)
-        seeds = CifDetSeeds(cifdethr.accumulated).fill(fields, self.cifdet_metas)
+        cifdethr = utils.CifDetHr().fill(fields, self.cifdet_metas)
+        seeds = utils.CifDetSeeds(cifdethr.accumulated).fill(fields, self.cifdet_metas)
 
         raf_scored = RafScored(cifdethr.accumulated).fill(fields, self.raf_metas)
 
-        occupied = Occupancy(cifdethr.accumulated.shape, 2, min_scale=4)
+        occupied = utils.Occupancy(cifdethr.accumulated.shape, 2, min_scale=4)
         annotations = []
 
 

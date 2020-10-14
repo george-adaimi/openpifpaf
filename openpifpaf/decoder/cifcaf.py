@@ -7,22 +7,56 @@ from typing import List
 
 import numpy as np
 
-from .generator import Generator
-from ...annotation import Annotation
-from ..cif_hr import CifHr
-from ..cif_seeds import CifSeeds
-from ..caf_scored import CafScored
-from .. import nms as nms_module
-from ..occupancy import Occupancy
-from ... import headmeta, visualizer
+from .decoder import Decoder
+from ..annotation import Annotation
+from . import utils
+from .. import headmeta, visualizer
 
 # pylint: disable=import-error
-from ...functional import caf_center_s, grow_connection_blend
+from ..functional import caf_center_s, grow_connection_blend
 
 LOG = logging.getLogger(__name__)
 
 
-class CifCaf(Generator):
+class DenseAdapter:
+    def __init__(self, cif_meta, caf_meta, dense_caf_meta):
+        self.cif_meta = cif_meta
+        self.caf_meta = caf_meta
+        self.dense_caf_meta = dense_caf_meta
+
+        # overwrite confidence scale
+        self.dense_caf_meta.confidence_scales = [
+            CifCaf.dense_coupling for _ in self.dense_caf_meta.skeleton
+        ]
+
+        concatenated_caf_meta = headmeta.Caf.concatenate(
+            [caf_meta, dense_caf_meta])
+        self.cifcaf = CifCaf([cif_meta], [concatenated_caf_meta])
+
+    @classmethod
+    def factory(cls, head_metas):
+        if len(head_metas) < 3:
+            return []
+        return [
+            DenseAdapter(cif_meta, caf_meta, dense_meta)
+            for cif_meta, caf_meta, dense_meta in zip(head_metas, head_metas[1:], head_metas[2:])
+            if (isinstance(cif_meta, headmeta.Cif)
+                and isinstance(caf_meta, headmeta.Caf)
+                and isinstance(dense_meta, headmeta.Caf))
+        ]
+
+    def __call__(self, fields, initial_annotations=None):
+        cifcaf_fields = [
+            fields[self.cif_meta.head_index],
+            np.concatenate([
+                fields[self.caf_meta.head_index],
+                fields[self.dense_caf_meta.head_index],
+            ], axis=0)
+        ]
+        return self.cifcaf(cifcaf_fields)
+
+
+class CifCaf(Decoder):
     """Generate CifCaf poses from fields.
 
     :param: nms: set to None to switch off non-maximum suppression.
@@ -33,6 +67,7 @@ class CifCaf(Generator):
     greedy = False
     keypoint_threshold = 0.001
     nms = True
+    dense_coupling = 0.0
 
     def __init__(self,
                  cif_metas: List[headmeta.Cif],
@@ -45,6 +80,7 @@ class CifCaf(Generator):
         self.caf_metas = caf_metas
         self.skeleton_m1 = np.asarray(self.caf_metas[0].skeleton) - 1
         self.keypoints = cif_metas[0].keypoints
+        self.score_weights = cif_metas[0].score_weights
         self.out_skeleton = caf_metas[0].skeleton
         self.confidence_scales = caf_metas[0].decoder_confidence_scales
 
@@ -56,7 +92,7 @@ class CifCaf(Generator):
             self.caf_visualizers = [visualizer.Caf(meta) for meta in caf_metas]
 
         if self.nms is True:
-            self.nms = nms_module.Keypoints()
+            self.nms = utils.nms.Keypoints()
 
         self.timers = defaultdict(float)
 
@@ -74,14 +110,10 @@ class CifCaf(Generator):
     def cli(cls, parser: argparse.ArgumentParser):
         """Commond line interface (CLI) to extend argument parser."""
         group = parser.add_argument_group('CifCaf decoder')
-        if cls.force_complete:
-            group.add_argument('--no-force-complete-pose',
-                               dest='force_complete_pose',
-                               default=True, action='store_false')
-        else:
-            group.add_argument('--force-complete-pose',
-                               dest='force_complete_pose',
-                               default=False, action='store_true')
+        assert not cls.force_complete
+        group.add_argument('--force-complete-pose',
+                            dest='force_complete_pose',
+                            default=False, action='store_true')
 
         group.add_argument('--keypoint-threshold', type=float,
                            default=cls.keypoint_threshold,
@@ -94,6 +126,8 @@ class CifCaf(Generator):
                            default=cls.connection_method,
                            choices=('max', 'blend'),
                            help='connection method to use, max is faster')
+        group.add_argument('--dense-connections', nargs='?', type=float,
+                           default=0.0, const=1.0)
 
     @classmethod
     def configure(cls, args: argparse.Namespace):
@@ -106,10 +140,13 @@ class CifCaf(Generator):
                                   if not args.force_complete_pose else 0.0)
         cls.greedy = args.greedy
         cls.connection_method = args.connection_method
+        cls.dense_coupling = args.dense_connections
 
     @classmethod
     def factory(cls, head_metas):
         # TODO: multi-scale
+        if cls.dense_coupling:
+            return DenseAdapter.factory(head_metas)
         return [
             CifCaf([meta], [meta_next])
             for meta, meta_next in zip(head_metas[:-1], head_metas[1:])
@@ -128,11 +165,11 @@ class CifCaf(Generator):
         for vis, meta in zip(self.caf_visualizers, self.caf_metas):
             vis.predicted(fields[meta.head_index])
 
-        cifhr = CifHr().fill(fields, self.cif_metas)
-        seeds = CifSeeds(cifhr.accumulated).fill(fields, self.cif_metas)
-        caf_scored = CafScored(cifhr.accumulated).fill(fields, self.caf_metas)
+        cifhr = utils.CifHr().fill(fields, self.cif_metas)
+        seeds = utils.CifSeeds(cifhr.accumulated).fill(fields, self.cif_metas)
+        caf_scored = utils.CafScored(cifhr.accumulated).fill(fields, self.caf_metas)
 
-        occupied = Occupancy(cifhr.accumulated.shape, 2, min_scale=4)
+        occupied = utils.Occupancy(cifhr.accumulated.shape, 2, min_scale=4)
         annotations = []
 
         def mark_occupied(ann):
@@ -152,7 +189,10 @@ class CifCaf(Generator):
             if occupied.get(f, x, y):
                 continue
 
-            ann = Annotation(self.keypoints, self.out_skeleton).add(f, (x, y, v))
+            ann = Annotation(self.keypoints,
+                             self.out_skeleton,
+                             score_weights=self.score_weights
+                             ).add(f, (x, y, v))
             ann.joint_scales[f] = s
             self._grow(ann, caf_scored)
             annotations.append(ann)
@@ -321,7 +361,8 @@ class CifCaf(Generator):
     def complete_annotations(self, cifhr, fields, annotations):
         start = time.perf_counter()
 
-        caf_scored = CafScored(cifhr.accumulated, score_th=0.0001).fill(fields, self.caf_metas)
+        caf_scored = utils.CafScored(cifhr.accumulated, score_th=0.0001).fill(
+            fields, self.caf_metas)
         for ann in annotations:
             unfilled_mask = ann.data[:, 2] == 0.0
             self._grow(ann, caf_scored, reverse_match=False)

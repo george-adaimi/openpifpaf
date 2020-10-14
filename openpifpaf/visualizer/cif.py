@@ -31,13 +31,18 @@ class Cif(Base):
         assert self.meta.draw_skeleton is not None
 
         annotations = [
-            Annotation(keypoints=self.meta.keypoints, skeleton=self.meta.draw_skeleton).set(
-                ann['keypoints'], fixed_score=None, fixed_bbox=ann['bbox'])
+            Annotation(
+                keypoints=self.meta.keypoints,
+                skeleton=self.meta.draw_skeleton,
+                sigmas=self.meta.sigmas,
+                score_weights=self.meta.score_weights
+            ).set(
+                ann['keypoints'], fixed_score='', fixed_bbox=ann['bbox'])
             for ann in annotation_dicts
         ]
 
         self._confidences(field[:, 0])
-        self._regressions(field[:, 1:3], field[:, 3], annotations=annotations)
+        self._regressions(field[:, 1:3], field[:, 4], annotations=annotations)
 
     def predicted(self, field):
         self._confidences(field[:, 0])

@@ -11,6 +11,7 @@ from .constants import (
     COCO_KEYPOINTS,
     COCO_PERSON_SKELETON,
     COCO_PERSON_SIGMAS,
+    COCO_PERSON_SCORE_WEIGHTS,
     COCO_UPRIGHT_POSE,
     DENSER_COCO_PERSON_CONNECTIONS,
     HFLIP,
@@ -58,7 +59,8 @@ class CocoKp(DataModule):
                            keypoints=COCO_KEYPOINTS,
                            sigmas=COCO_PERSON_SIGMAS,
                            pose=COCO_UPRIGHT_POSE,
-                           draw_skeleton=COCO_PERSON_SKELETON)
+                           draw_skeleton=COCO_PERSON_SKELETON,
+                           score_weights=COCO_PERSON_SCORE_WEIGHTS)
         caf = headmeta.Caf('caf', 'cocokp',
                            keypoints=COCO_KEYPOINTS,
                            sigmas=COCO_PERSON_SIGMAS,
@@ -198,24 +200,14 @@ class CocoKp(DataModule):
                              2.0 * self.rescale_images),
                 power_law=True, stretch_range=(0.75, 1.33))
 
-        blur_t = None
-        if self.blur:
-            blur_t = transforms.RandomApply(transforms.Blur(), self.blur)
-
-        orientation_t = None
-        if self.orientation_invariant:
-            orientation_t = transforms.RandomApply(
-                transforms.RotateBy90(), self.orientation_invariant)
-
         return transforms.Compose([
             transforms.NormalizeAnnotations(),
-            transforms.AnnotationJitter(),
             transforms.RandomApply(transforms.HFlip(COCO_KEYPOINTS, HFLIP), 0.5),
             rescale_t,
-            blur_t,
+            transforms.RandomApply(transforms.Blur(), self.blur),
             transforms.Crop(self.square_edge, use_area_of_interest=True),
             transforms.CenterPad(self.square_edge),
-            orientation_t,
+            transforms.RandomApply(transforms.RotateBy90(), self.orientation_invariant),
             transforms.TRAIN_TRANSFORM,
             transforms.Encoders(encoders),
         ])
@@ -230,7 +222,7 @@ class CocoKp(DataModule):
             category_ids=[1],
         )
         return torch.utils.data.DataLoader(
-            train_data, batch_size=self.batch_size, shuffle=not self.debug,
+            train_data, batch_size=self.batch_size, shuffle=not self.debug and self.augmentation,
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=True,
             collate_fn=collate_images_targets_meta)
 

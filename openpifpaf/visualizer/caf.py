@@ -16,7 +16,6 @@ LOG = logging.getLogger(__name__)
 
 
 class Caf(Base):
-    show_margin = False
     show_background = False
     show_confidences = False
     show_regressions = False
@@ -31,13 +30,17 @@ class Caf(Base):
         assert self.meta.skeleton is not None
 
         annotations = [
-            Annotation(keypoints=self.meta.keypoints, skeleton=self.meta.skeleton).set(
-                ann['keypoints'], fixed_score=None, fixed_bbox=ann['bbox'])
+            Annotation(
+                keypoints=self.meta.keypoints,
+                skeleton=self.meta.skeleton,
+                sigmas=self.meta.sigmas,
+            ).set(
+                ann['keypoints'], fixed_score='', fixed_bbox=ann['bbox'])
             for ann in annotation_dicts
         ]
 
         self._confidences(field[:, 0])
-        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 5], field[:, 6],
+        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 7], field[:, 8],
                           annotations=annotations)
 
     def predicted(self, field):
@@ -97,8 +100,5 @@ class Caf(Base):
                            regression_field=regression_fields2[f, :2],
                            xy_scale=self.meta.stride, cmap='Greens', fill=False,
                            regression_field_is_offset=uv_is_offset)
-                if self.show_margin:
-                    show.margins(ax, regression_fields1[f, :6], xy_scale=self.meta.stride)
-                    show.margins(ax, regression_fields2[f, :6], xy_scale=self.meta.stride)
 
                 self.colorbar(ax, q1)
