@@ -11,7 +11,7 @@ class Raf(headmeta.Base):
 
     n_confidences: ClassVar[int] = 1
     n_vectors: ClassVar[int] = 2
-    n_scales: ClassVar[int] = 2
+    n_scales: ClassVar[int] = 0
 
     vector_offsets = [True, True]
     decoder_min_distance = 0.0

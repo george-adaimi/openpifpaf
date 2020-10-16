@@ -40,7 +40,7 @@ def cli():
     parser.add_argument('--checkpoints', default=DEFAULT_CHECKPOINTS, nargs='+',
                         help='checkpoints to evaluate')
     parser.add_argument('--iccv2019-ablation', default=False, action='store_true')
-    parser.add_argument('--dense-ablation', default=False, action='store_true')
+    parser.add_argument('--v012-ablation', default=False, action='store_true')
     group = parser.add_argument_group('logging')
     group.add_argument('--debug', default=False, action='store_true',
                        help='print debug messages')
@@ -67,6 +67,9 @@ def cli():
         if not any(l.startswith('--force-complete-pose') for l in eval_args):
             LOG.info('adding "--force-complete-pose" to the argument list')
             eval_args.append('--force-complete-pose')
+        if not any(l.startswith('--seed-threshold') for l in eval_args):
+            LOG.info('adding "--seed-threshold=0.2" to the argument list')
+            eval_args.append('--seed-threshold=0.2')
 
     # generate a default output filename
     if args.output is None:
@@ -93,8 +96,6 @@ def run_eval_coco(output_folder, checkpoint, eval_args, output_name=None):
         'python', '-m', 'openpifpaf.eval',
         '--output', out_file,
         '--checkpoint', checkpoint,
-        '--force-complete-pose',
-        '--seed-threshold=0.2',
     ] + eval_args, check=True)
 
 
@@ -118,17 +119,21 @@ def main():
         ]
         for eval_args_i, name_i in zip(multi_eval_args, names):
             run_eval_coco(args.output, args.checkpoints[0], eval_args_i, output_name=name_i)
-    elif args.dense_ablation:
+    elif args.v012_ablation:
         multi_eval_args = [
             eval_args,
-            eval_args + ['--dense-coupling=1.0'],
-            eval_args + ['--dense-coupling=0.1'],
+            eval_args + ['--greedy'],
+            eval_args + ['--greedy', '--dense-connections'],
+            eval_args + ['--dense-connections'],
+            eval_args + ['--dense-connections=0.1'],
         ]
         for checkpoint in args.checkpoints:
             names = [
                 checkpoint,
-                '{}.wdense'.format(checkpoint),
-                '{}.wdense.whierarchy'.format(checkpoint),
+                '{}.greedy'.format(checkpoint),
+                '{}.greedy.dense'.format(checkpoint),
+                '{}.dense'.format(checkpoint),
+                '{}.dense.hierarchy'.format(checkpoint),
             ]
             for eval_args_i, name_i in zip(multi_eval_args, names):
                 run_eval_coco(args.output, checkpoint, eval_args_i, output_name=name_i)
@@ -147,27 +152,32 @@ def main():
     LOG.debug('all data: %s', stats)
 
     # pretty printing
-    # pylint: disable=line-too-long
-    print('| Checkpoint                | AP       | APM      | APL      | t_{total} [ms]  | t_{dec} [ms] |     size |')
-    print('|--------------------------:|:--------:|:--------:|:--------:|:---------------:|:------------:|---------:|')
+    checkpoint_w = max(len(c) for c in stats.keys())
+    table_divider = '-'
+    checkpoint_title = 'Checkpoint'
+    print(f'| {checkpoint_title: <{checkpoint_w}}   |'
+          ' AP       | APM      | APL      |'
+          ' t_{total} [ms]  | t_{dec} [ms] |'
+          '     size |')
+    print(f'|-{table_divider:{table_divider}<{checkpoint_w}}--:|'
+          ':--------:|:--------:|:--------:|'
+          ':---------------:|:------------:|'
+          '---------:|')
     for checkpoint, data in sorted(stats.items(), key=lambda b_d: b_d[1]['stats'][0]):
+        AP = 100.0 * data['stats'][0]
+        APM = 100.0 * data['stats'][3]
+        APL = 100.0 * data['stats'][4]
+        t = 1000.0 * data['total_time'] / data['n_images']
+        tdec = 1000.0 * data['decoder_time'] / data['n_images']
+        file_size = data['file_size'] / 1024 / 1024
         print(
-            '| {checkpoint: <25} '
-            '| __{AP:.1f}__ '
-            '| {APM: <8.1f} '
-            '| {APL: <8.1f} '
-            '| {t: <15.0f} '
-            '| {tdec: <12.0f} '
-            '| {file_size: >6.1f}MB '
-            '|'.format(
-                checkpoint='['+checkpoint+']',
-                AP=100.0 * data['stats'][0],
-                APM=100.0 * data['stats'][3],
-                APL=100.0 * data['stats'][4],
-                t=1000.0 * data['total_time'] / data['n_images'],
-                tdec=1000.0 * data['decoder_time'] / data['n_images'],
-                file_size=data['file_size'] / 1024 / 1024,
-            )
+            f'| [{checkpoint: <{checkpoint_w}}] '
+            f'| __{AP: <2.1f}__ '
+            f'| {APM: <8.1f} '
+            f'| {APL: <8.1f} '
+            f'| {t: <15.0f} '
+            f'| {tdec: <12.0f} '
+            f'| {file_size: >6.1f}MB |'
         )
 
 

@@ -2,16 +2,12 @@ import logging
 import time
 import numpy as np
 
-from openpifpaf.decoder import CifHr
+from openpifpaf.decoder import utils
 from .functional import scalar_square_add_2dgauss, cumulative_average_2d
 
 LOG = logging.getLogger(__name__)
 
-class ButterflyHr(CifHr):
-    def __init__(self, fullfields=False):
-        super(ButterflyHr, self).__init__()
-        self.fullfields = True
-
+class ButterflyHr(utils.CifHr):
     def fill(self, all_fields, metas):
         start = time.perf_counter()
 

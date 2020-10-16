@@ -3,35 +3,37 @@ import numpy as np
 # pylint: disable=import-error
 from .functional import scalar_value_clipped
 
-NOTSET = '__notset__'
-
 
 class Base:
     pass
 
 
 class Annotation(Base):
-    def __init__(self, keypoints, skeleton, *,
-                 categories=None, suppress_score_index=None):
+    def __init__(self, keypoints, skeleton, sigmas=None, *,
+                 categories=None, score_weights=None, suppress_score_index=None):
         self.keypoints = keypoints
         self.skeleton = skeleton
+        self.sigmas = sigmas
         self.categories = categories
+        self.score_weights = score_weights
         self.suppress_score_index = suppress_score_index
 
         self.category_id = 1
         self.data = np.zeros((len(keypoints), 3), dtype=np.float32)
         self.joint_scales = np.zeros((len(keypoints),), dtype=np.float32)
-        self.fixed_score = NOTSET
-        self.fixed_bbox = NOTSET
+        self.fixed_score = None
+        self.fixed_bbox = None
         self.decoding_order = []
         self.frontier_order = []
 
         self.skeleton_m1 = (np.asarray(skeleton) - 1).tolist()
-
-        self.score_weights = np.ones((len(keypoints),))
+        if score_weights is None:
+            self.score_weights = np.ones((len(keypoints),))
+        else:
+            assert len(self.score_weights) == len(keypoints), "wrong number of scores"
+            self.score_weights = np.asarray(self.score_weights)
         if self.suppress_score_index:
             self.score_weights[-1] = 0.0
-        self.score_weights[:3] = 3.0
         self.score_weights /= np.sum(self.score_weights)
 
     @property
@@ -42,12 +44,15 @@ class Annotation(Base):
         self.data[joint_i] = xyv
         return self
 
-    def set(self, data, joint_scales=None, *, category_id=1, fixed_score=NOTSET, fixed_bbox=NOTSET):
+    def set(self, data, joint_scales=None, *, category_id=1, fixed_score=None, fixed_bbox=None):
         self.data = data
         if joint_scales is not None:
             self.joint_scales = joint_scales
         else:
             self.joint_scales[:] = 0.0
+            if self.sigmas is not None and fixed_bbox is not None:
+                area = fixed_bbox[2] * fixed_bbox[3]
+                self.joint_scales = np.sqrt(area) * np.asarray(self.sigmas)
         self.category_id = category_id
         self.fixed_score = fixed_score
         self.fixed_bbox = fixed_bbox
@@ -71,7 +76,7 @@ class Annotation(Base):
             self.joint_scales[xyv_i] = scale / hr_scale
 
     def score(self):
-        if self.fixed_score != NOTSET:
+        if self.fixed_score is not None:
             return self.fixed_score
 
         v = self.data[:, 2]
@@ -117,7 +122,7 @@ class Annotation(Base):
         return data
 
     def bbox(self):
-        if self.fixed_bbox != NOTSET:
+        if self.fixed_bbox is not None:
             return self.fixed_bbox
         return self.bbox_from_keypoints(self.data, self.joint_scales)
 

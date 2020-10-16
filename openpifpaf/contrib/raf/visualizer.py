@@ -12,9 +12,9 @@ LOG = logging.getLogger(__name__)
 
 class Raf(Base):
     show_margin = False
-    show_background = False
-    show_confidences = False
-    show_regressions = False
+    show_background = True
+    show_confidences = True
+    show_regressions = True
     fig_file = None
 
     def __init__(self, meta: headmeta.Raf):
@@ -31,14 +31,21 @@ class Raf(Base):
             for ann in annotation_dicts
         ]
         self._confidences(field[:, 0])
-        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 5], field[:, 6], confidence_fields=field[:, 0], annotations=annotations)
+        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 5], field[:, 6], confidence_fields=field[:,0], annotations=annotations)
 
     def predicted(self, field):
         self._confidences(field[:, 0])
-        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 7], field[:, 8],
-                          annotations=self._ground_truth,
-                          confidence_fields=field[:, 0],
-                          uv_is_offset=False)
+        if field.shape[1]>=9:
+
+            self._regressions(field[:, 1:3], field[:, 3:5], field[:, 7], field[:, 8],
+                              annotations=self._ground_truth,
+                              confidence_fields=field[:, 0],
+                              uv_is_offset=False)
+        else:
+            self._regressions(field[:, 1:3], field[:, 3:5], None, None,
+                              annotations=self._ground_truth,
+                              confidence_fields=field[:, 0],
+                              uv_is_offset=False)
 
     def _confidences(self, confidences):
         if not self.show_confidences:
@@ -49,8 +56,8 @@ class Raf(Base):
             #LOG.debug('%s,%s',
             #          self.keypoints[self.skeleton[f][0] - 1],
             #          self.keypoints[self.skeleton[f][1] - 1])
-            fig_file = os.path.join(self.fig_file, "prediction_image.raf_c_"+str(f)+".jpg") if self.fig_file else None
-            with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
+            #fig_file = os.path.join(self.fig_file, "prediction_image.raf_c_"+str(f)+".jpg") if self.fig_file else None
+            with self.image_canvas(self._processed_image) as ax:
                 ax.text(0, 0, '{}'.format(self.meta.rel_categories[f]), fontsize=8, color='red')
                 im = ax.imshow(self.scale_scalar(confidences[f], self.meta.stride),
                                alpha=0.9, vmin=0.0, vmax=1.0, cmap='Blues')
@@ -68,8 +75,8 @@ class Raf(Base):
             #          self.keypoints[self.skeleton[f][1] - 1])
 
             confidence_field = confidence_fields[f] if confidence_fields is not None else None
-            fig_file = os.path.join(self.fig_file, "prediction_image.raf_reg_"+str(f)+".jpg") if self.fig_file else None
-            with self.image_canvas(self._processed_image, fig_file=fig_file) as ax:
+            #fig_file = os.path.join(self.fig_file, "prediction_image.raf_reg_"+str(f)+".jpg") if self.fig_file else None
+            with self.image_canvas(self._processed_image) as ax:
                 show.white_screen(ax, alpha=0.5)
                 ax.text(0, 0, '{}'.format(self.meta.rel_categories[f]), fontsize=14, color='red')
                 if annotations:
@@ -84,16 +91,17 @@ class Raf(Base):
                             confidence_field=confidence_field,
                             xy_scale=self.meta.stride, uv_is_offset=uv_is_offset,
                             cmap='Greens', clim=(0.5, 1.0), width=0.001, threshold=0.2)
-                show.boxes(ax, scale_fields1[f] / 2.0,
-                           confidence_field=confidence_field,
-                           regression_field=regression_fields1[f, :2],
-                           xy_scale=self.meta.stride, cmap='Reds', fill=False,
-                           regression_field_is_offset=uv_is_offset)
-                show.boxes(ax, scale_fields2[f] / 2.0,
-                           confidence_field=confidence_field,
-                           regression_field=regression_fields2[f, :2],
-                           xy_scale=self.meta.stride, cmap='Greens', fill=False,
-                           regression_field_is_offset=uv_is_offset, threshold=0.2)
+                if scale_fields1 is not None and scale_fields2 is not None:
+                    show.boxes(ax, scale_fields1[f] / 2.0,
+                               confidence_field=confidence_field,
+                               regression_field=regression_fields1[f, :2],
+                               xy_scale=self.meta.stride, cmap='Reds', fill=False,
+                               regression_field_is_offset=uv_is_offset)
+                    show.boxes(ax, scale_fields2[f] / 2.0,
+                               confidence_field=confidence_field,
+                               regression_field=regression_fields2[f, :2],
+                               xy_scale=self.meta.stride, cmap='Greens', fill=False,
+                               regression_field_is_offset=uv_is_offset, threshold=0.2)
                 if self.show_margin:
                     show.margins(ax, regression_fields1[f, :6], xy_scale=self.meta.stride)
                     show.margins(ax, regression_fields2[f, :6], xy_scale=self.meta.stride)

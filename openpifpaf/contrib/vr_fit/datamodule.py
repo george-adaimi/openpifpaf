@@ -6,10 +6,10 @@ import torchvision
 import openpifpaf
 
 from .visual_relationship import VisualRelationship
-from .constants import BBOX_KEYPOINTS, BBOX_HFLIP, OBJ_CATEGORIES, REL_CATEGORIES
+from .constants import BBOX_KEYPOINTS, BBOX_HFLIP, OBJ_CATEGORIES_FIT, REL_CATEGORIES_FIT, OBJ_CATEGORIES, REL_CATEGORIES
 #from . import metric
-from .. import headmeta
-from ..raf import Raf
+from ..raf import headmeta
+from ..raf.raf import Raf
 
 class VisualRelationshipModule(openpifpaf.datasets.DataModule):
     train_image_dir = "data/visual_relationship/sg_dataset/sg_train_images"
@@ -32,54 +32,61 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
     eval_long_edge = None
     eval_orientation_invariant = 0.0
     eval_extended_scale = False
-    obj_categories = OBJ_CATEGORIES
-    rel_categories = REL_CATEGORIES
+    obj_categories = OBJ_CATEGORIES_FIT
+    rel_categories = REL_CATEGORIES_FIT
     def __init__(self):
         super().__init__()
 
-        raf = headmeta.Raf('raf', 'visual_relationship', self.obj_categories, self.rel_categories)
+        raf = headmeta.Raf('raf', 'vr_fit', self.obj_categories, self.rel_categories)
         raf.upsample_stride = self.upsample_stride
-        cifdet = openpifpaf.headmeta.CifDet('cifdet', 'visual_relationship', self.obj_categories)
+        cifdet = openpifpaf.headmeta.CifDet('cifdet', 'vr_fit', self.obj_categories)
         cifdet.upsample_stride = self.upsample_stride
         self.head_metas = [cifdet, raf]
+        self.objlabel2fit = {}
+        for i, object in enumerate(self.obj_categories):
+            self.objlabel2fit[OBJ_CATEGORIES.index(object)] = i
+        self.rellabel2fit = {}
+        for i, object in enumerate(self.rel_categories):
+            self.rellabel2fit[REL_CATEGORIES.index(object)] = i
+
 
 
     @classmethod
     def cli(cls, parser: argparse.ArgumentParser):
         group = parser.add_argument_group('data module Visual Relationship')
 
-        group.add_argument('--visual-relationship-train-annotations',
+        group.add_argument('--vr-fit-train-annotations',
                            default=cls.train_annotations)
-        group.add_argument('--visual-relationship-val-annotations',
+        group.add_argument('--vr-fit-val-annotations',
                            default=cls.val_annotations)
-        group.add_argument('--visual-relationship-train-image-dir',
+        group.add_argument('--vr-fit-train-image-dir',
                            default=cls.train_image_dir)
-        group.add_argument('--visual-relationship-val-image-dir',
+        group.add_argument('--vr-fit-val-image-dir',
                            default=cls.val_image_dir)
 
-        group.add_argument('--visual-relationship-n-images',
+        group.add_argument('--vr-fit-n-images',
                            default=cls.n_images, type=int,
                            help='number of images to sample')
-        group.add_argument('--visual-relationship-square-edge',
+        group.add_argument('--vr-fit-square-edge',
                            default=cls.square_edge, type=int,
                            help='square edge of input images')
         assert not cls.extended_scale
-        group.add_argument('--visual-relationship-extended-scale',
+        group.add_argument('--vr-fit-extended-scale',
                            default=False, action='store_true',
                            help='augment with an extended scale range')
-        group.add_argument('--visual-relationship-orientation-invariant',
+        group.add_argument('--vr-fit-orientation-invariant',
                            default=cls.orientation_invariant, type=float,
                            help='augment with random orientations')
         assert cls.augmentation
-        group.add_argument('--visual-relationship-no-augmentation',
-                           dest='visual_relationship_augmentation',
+        group.add_argument('--vr-fit-no-augmentation',
+                           dest='vr_fit_augmentation',
                            default=True, action='store_false',
                            help='do not apply data augmentation')
-        group.add_argument('--visual-relationship-rescale-images',
+        group.add_argument('--vr-fit-rescale-images',
                            default=cls.rescale_images, type=float,
                            help='overall rescale factor for images')
 
-        group.add_argument('--visual-relationship-upsample',
+        group.add_argument('--vr-fit-upsample',
                            default=cls.upsample_stride, type=int,
                            help='head upsample stride')
 
@@ -90,18 +97,18 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
         cls.pin_memory = args.pin_memory
 
         # visual relationship specific
-        cls.train_annotations = args.visual_relationship_train_annotations
-        cls.val_annotations = args.visual_relationship_val_annotations
-        cls.train_image_dir = args.visual_relationship_train_image_dir
-        cls.val_image_dir = args.visual_relationship_val_image_dir
+        cls.train_annotations = args.vr_fit_train_annotations
+        cls.val_annotations = args.vr_fit_val_annotations
+        cls.train_image_dir = args.vr_fit_train_image_dir
+        cls.val_image_dir = args.vr_fit_val_image_dir
 
-        cls.n_images = args.visual_relationship_n_images
-        cls.square_edge = args.visual_relationship_square_edge
-        cls.extended_scale = args.visual_relationship_extended_scale
-        cls.orientation_invariant = args.visual_relationship_orientation_invariant
-        cls.augmentation = args.visual_relationship_augmentation
-        cls.rescale_images = args.visual_relationship_rescale_images
-        cls.upsample_stride = args.visual_relationship_upsample
+        cls.n_images = args.vr_fit_n_images
+        cls.square_edge = args.vr_fit_square_edge
+        cls.extended_scale = args.vr_fit_extended_scale
+        cls.orientation_invariant = args.vr_fit_orientation_invariant
+        cls.augmentation = args.vr_fit_augmentation
+        cls.rescale_images = args.vr_fit_rescale_images
+        cls.upsample_stride = args.vr_fit_upsample
 
     @staticmethod
     def _convert_data(parent_data, meta):
@@ -164,6 +171,8 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
             ann_file=self.train_annotations,
             preprocess=self._preprocess(),
             n_images=self.n_images,
+            objlabel2fit=self.objlabel2fit,
+            rellabel2fit=self.rellabel2fit
         )
         return torch.utils.data.DataLoader(
             train_data, batch_size=self.batch_size, shuffle=not self.debug and self.augmentation,
@@ -176,6 +185,8 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
             ann_file=self.val_annotations,
             preprocess=self._preprocess(),
             n_images=self.n_images,
+            objlabel2fit=self.objlabel2fit,
+            rellabel2fit=self.rellabel2fit
         )
 
         return torch.utils.data.DataLoader(
