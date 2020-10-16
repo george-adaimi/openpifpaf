@@ -3,18 +3,20 @@ from collections import defaultdict
 import heapq
 import logging
 import time
+import math
 from typing import List
 
 import heapq
 import numpy as np
 
 from openpifpaf.annotation import AnnotationDet
-from .raf_scored import RafScored
+from .raf_analyzer import RafAnalyzer
 from openpifpaf.decoder import Decoder, utils
 from .headmeta import Raf
 from openpifpaf import headmeta,visualizer
 from . import visualizer as visualizer_raf
 
+from openpifpaf.functional import grow_connection_blend
 LOG = logging.getLogger(__name__)
 
 class CifDetRaf(Decoder):
@@ -58,6 +60,11 @@ class CifDetRaf(Decoder):
         self.by_target = defaultdict(dict)
 
         self.by_source = defaultdict(dict)
+        for j1 in range(len(self.raf_metas[0].obj_categories)):
+            for j2 in range(len(self.raf_metas[0].obj_categories)):
+                for raf_i in range(len(self.raf_metas[0].rel_categories)):
+                    self.by_source[j1][j2] = (raf_i, True)
+                    self.by_source[j2][j1] = (raf_i, True)
 
     @classmethod
     def factory(cls, head_metas):
@@ -92,7 +99,7 @@ class CifDetRaf(Decoder):
         cifdethr = utils.CifDetHr().fill(fields, self.cifdet_metas)
         seeds = utils.CifDetSeeds(cifdethr.accumulated).fill(fields, self.cifdet_metas)
 
-        raf_scored = RafScored(cifdethr.accumulated).fill(fields, self.raf_metas)
+        raf_analyzer = RafAnalyzer(cifdethr.accumulated).fill(fields, self.raf_metas)
 
         occupied = utils.Occupancy(cifdethr.accumulated.shape, 2, min_scale=4)
         annotations = []
@@ -109,12 +116,39 @@ class CifDetRaf(Decoder):
         for v, f, x, y, w, h in seeds.get():
             if occupied.get(f, x, y):
                 continue
-            ann = AnnotationDet(self.metas[0].categories).set(f + 1, v, (x - w/2.0, y - h/2.0, w, h))
-            self._grow(ann, raf_scored)
+            ann = AnnotationDet(self.cifdet_metas[0].categories).set(f + 1, v, (x - w/2.0, y - h/2.0, w, h))
             annotations.append(ann)
             #mark_occupied(ann)
             occupied.set(f, x, y, 0.1 * min(w, h))
+        dict_rel = {}
 
+        for raf_v, index_s, x_s, y_s, raf_i, index_o, x_o, y_o in raf_analyzer.triplets:
+            s_idx = None
+            o_idx = None
+            min_value_s = None
+            min_value_o = None
+            for ann_idx, ann in enumerate(annotations):
+                import pdb; pdb.set_trace()
+                if not(ann.category_id-1 == index_s or ann.category_id-1 == index_o):
+                    continue
+                a = ann.bbox[0] + ann.bbox[2]/2.0
+                b = ann.bbox[1] + ann.bbox[3]/2.0
+                curr_dist = 1/(raf_v+0.00001)*(math.sqrt((a - x_s)**2+(b - y_s)**2))
+                if min_value_s is None or curr_dist<min_value_s:
+                    min_value_s = curr_dist
+                    s_idx = ann_idx
+                curr_dist = 1/(raf_v+0.00001)*(math.sqrt((a - x_o)**2+(b - y_o)**2))
+                if min_value_o is None or curr_dist<min_value_o:
+                    min_value_o = curr_dist
+                    o_idx = ann_idx
+            if (s_idx, raf_i, o_idx) in dict_rel:
+                dict_rel[(s_idx, raf_i, o_idx)][0] += raf_v
+            else:
+                try:
+                    dict_rel[(s_idx, raf_i, o_idx)] = [raf_v, annotations[s_idx].score, annotations[o_idx].score]
+                except:
+                    import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
         self.occupancy_visualizer.predicted(occupied)
 
         LOG.debug('annotations %d, %.3fs', len(annotations), time.perf_counter() - start)
@@ -126,91 +160,91 @@ class CifDetRaf(Decoder):
                  [np.sum(ann.data[:, 2] > 0.1) for ann in annotations])
         return annotations
 
-    def connection_value(self, ann, raf_scored, start_i, end_i, *, reverse_match=True):
-        raf_i, forward = self.by_source[start_i][end_i]
-        raf_f, raf_b = raf_scored.directed(raf_i, forward)
-        xyv = ann.data[start_i]
-        xy_scale_s = max(0.0, ann.joint_scales[start_i])
-
-        only_max = self.connection_method == 'max'
-
-        new_xysv = grow_connection_blend(
-            raf_f, xyv[0], xyv[1], xy_scale_s, only_max)
-        keypoint_score = np.sqrt(new_xysv[3] * xyv[2])  # geometric mean
-        if keypoint_score < self.keypoint_threshold:
-            return 0.0, 0.0, 0.0, 0.0
-        if new_xysv[3] == 0.0:
-            return 0.0, 0.0, 0.0, 0.0
-        xy_scale_t = max(0.0, new_xysv[2])
-
-        # reverse match
-        if reverse_match:
-            reverse_xyv = grow_connection_blend(
-                raf_b, new_xysv[0], new_xysv[1], xy_scale_t, only_max)
-            if reverse_xyv[2] == 0.0:
-                return 0.0, 0.0, 0.0, 0.0
-            if abs(xyv[0] - reverse_xyv[0]) + abs(xyv[1] - reverse_xyv[1]) > xy_scale_s:
-                return 0.0, 0.0, 0.0, 0.0
-
-        return (new_xysv[0], new_xysv[1], new_xysv[2], keypoint_score)
-
-    def _grow(self, ann, raf_scored, *, reverse_match=True):
-        frontier = []
-        in_frontier = set()
-
-        def add_to_frontier(start_i):
-            for end_i, (raf_i, _) in self.by_source[start_i].items():
-                if ann.data[end_i, 2] > 0.0:
-                    continue
-                if (start_i, end_i) in in_frontier:
-                    continue
-
-                max_possible_score = np.sqrt(ann.data[start_i, 2])
-                if self.confidence_scales is not None:
-                    max_possible_score *= self.confidence_scales[raf_i]
-                heapq.heappush(frontier, (-max_possible_score, None, start_i, end_i))
-                in_frontier.add((start_i, end_i))
-                ann.frontier_order.append((start_i, end_i))
-
-        def frontier_get():
-            while frontier:
-                entry = heapq.heappop(frontier)
-                if entry[1] is not None:
-                    return entry
-
-                _, __, start_i, end_i = entry
-                if ann.data[end_i, 2] > 0.0:
-                    continue
-
-                new_xysv = self.connection_value(
-                    ann, raf_scored, start_i, end_i, reverse_match=reverse_match)
-                if new_xysv[3] == 0.0:
-                    continue
-                score = new_xysv[3]
-                if self.greedy:
-                    return (-score, new_xysv, start_i, end_i)
-                if self.confidence_scales is not None:
-                    raf_i, _ = self.by_source[start_i][end_i]
-                    score = score * self.confidence_scales[raf_i]
-                heapq.heappush(frontier, (-score, new_xysv, start_i, end_i))
-
-        # seeding the frontier
-        if ann.score == 0.0:
-            return
-        add_to_frontier(ann.field_i)
-
-        while True:
-            entry = frontier_get()
-            if entry is None:
-                break
-
-            _, new_xysv, jsi, jti = entry
-            if ann.data[jti, 2] > 0.0:
-                continue
-
-            ann.data[jti, :2] = new_xysv[:2]
-            ann.data[jti, 2] = new_xysv[3]
-            ann.joint_scales[jti] = new_xysv[2]
-            ann.decoding_order.append(
-                (jsi, jti, np.copy(ann.data[jsi]), np.copy(ann.data[jti])))
-            add_to_frontier(jti)
+    # def connection_value(self, ann, raf_scored, start_i, end_i, *, reverse_match=True):
+    #     raf_i, forward = self.by_source[start_i][end_i]
+    #     raf_f, raf_b = raf_scored.directed(raf_i, forward)
+    #     xyv = ann.data[start_i]
+    #     xy_scale_s = max(0.0, ann.joint_scales[start_i])
+    #
+    #     only_max = self.connection_method == 'max'
+    #
+    #     new_xysv = grow_connection_blend(
+    #         raf_f, xyv[0], xyv[1], xy_scale_s, only_max)
+    #     keypoint_score = np.sqrt(new_xysv[3] * xyv[2])  # geometric mean
+    #     if keypoint_score < self.keypoint_threshold:
+    #         return 0.0, 0.0, 0.0, 0.0
+    #     if new_xysv[3] == 0.0:
+    #         return 0.0, 0.0, 0.0, 0.0
+    #     xy_scale_t = max(0.0, new_xysv[2])
+    #
+    #     # reverse match
+    #     if reverse_match:
+    #         reverse_xyv = grow_connection_blend(
+    #             raf_b, new_xysv[0], new_xysv[1], xy_scale_t, only_max)
+    #         if reverse_xyv[2] == 0.0:
+    #             return 0.0, 0.0, 0.0, 0.0
+    #         if abs(xyv[0] - reverse_xyv[0]) + abs(xyv[1] - reverse_xyv[1]) > xy_scale_s:
+    #             return 0.0, 0.0, 0.0, 0.0
+    #
+    #     return (new_xysv[0], new_xysv[1], new_xysv[2], keypoint_score)
+    #
+    # def _grow(self, ann, raf_scored, *, reverse_match=True):
+    #     frontier = []
+    #     in_frontier = set()
+    #
+    #     def add_to_frontier(start_i):
+    #         for end_i, (raf_i, _) in self.by_source[start_i].items():
+    #             if ann.data[end_i, 2] > 0.0:
+    #                 continue
+    #             if (start_i, end_i) in in_frontier:
+    #                 continue
+    #
+    #             max_possible_score = np.sqrt(ann.data[start_i, 2])
+    #             if self.confidence_scales is not None:
+    #                 max_possible_score *= self.confidence_scales[raf_i]
+    #             heapq.heappush(frontier, (-max_possible_score, None, start_i, end_i))
+    #             in_frontier.add((start_i, end_i))
+    #             ann.frontier_order.append((start_i, end_i))
+    #
+    #     def frontier_get():
+    #         while frontier:
+    #             entry = heapq.heappop(frontier)
+    #             if entry[1] is not None:
+    #                 return entry
+    #
+    #             _, __, start_i, end_i = entry
+    #             if ann.data[end_i, 2] > 0.0:
+    #                 continue
+    #
+    #             new_xysv = self.connection_value(
+    #                 ann, raf_scored, start_i, end_i, reverse_match=reverse_match)
+    #             if new_xysv[3] == 0.0:
+    #                 continue
+    #             score = new_xysv[3]
+    #             if self.greedy:
+    #                 return (-score, new_xysv, start_i, end_i)
+    #             if self.confidence_scales is not None:
+    #                 raf_i, _ = self.by_source[start_i][end_i]
+    #                 score = score * self.confidence_scales[raf_i]
+    #             heapq.heappush(frontier, (-score, new_xysv, start_i, end_i))
+    #
+    #     # seeding the frontier
+    #     if ann.score == 0.0:
+    #         return
+    #     add_to_frontier(ann.category_id-1)
+    #     import pdb; pdb.set_trace()
+    #     while True:
+    #         entry = frontier_get()
+    #         if entry is None:
+    #             break
+    #
+    #         _, new_xysv, jsi, jti = entry
+    #         if ann.data[jti, 2] > 0.0:
+    #             continue
+    #
+    #         ann.data[jti, :2] = new_xysv[:2]
+    #         ann.data[jti, 2] = new_xysv[3]
+    #         ann.joint_scales[jti] = new_xysv[2]
+    #         ann.decoding_order.append(
+    #             (jsi, jti, np.copy(ann.data[jsi]), np.copy(ann.data[jti])))
+    #         add_to_frontier(jti)
