@@ -101,14 +101,14 @@ def logl1_loss(logx, t, **kwargs):
         logx, torch.log(t), **kwargs)
 
 
-class SmoothL1Loss():
+class SmoothL1Loss_old():
     r_smooth = 0.0
 
-    def __init__(self, *, scale_required=True):
+    def __init__(self, *, scale_required=False):
         self.scale = None
         self.scale_required = scale_required
 
-    def __call__(self, x1, x2, _, t1, t2, weight=None):
+    def __call__(self, x1, x2, _, t1, t2, __, *, weight=None, norm_low_clip=0.0):
         """L1 loss.
 
         Loss for a single two-dimensional vector (x1, x2)
@@ -125,6 +125,38 @@ class SmoothL1Loss():
 
         smooth_loss = 0.5 / r[smooth_regime] * d[smooth_regime] ** 2
         linear_loss = d[smooth_regime == 0] - (0.5 * r[smooth_regime == 0])
+        losses = torch.cat((smooth_loss, linear_loss))
+
+        if weight is not None:
+            losses = losses * weight
+
+        self.scale = None
+        return torch.sum(losses)
+
+class SmoothL1Loss():
+    r_smooth = 0.0
+
+    def __init__(self, *, scale_required=False):
+        self.scale = None
+        self.scale_required = scale_required
+
+    def __call__(self, x1, x2, _, t1, t2, __, *, weight=None, norm_low_clip=0.0):
+        """L1 loss.
+
+        Loss for a single two-dimensional vector (x1, x2)
+        true (t1, t2) vector.
+        """
+        if self.scale_required and self.scale is None:
+            raise Exception
+        if self.scale is None:
+            self.scale = 1.0
+
+        #r = self.r_smooth * self.scale
+        d = torch.sqrt((x1 - t1)**2 + (x2 - t2)**2)
+        smooth_regime = d < 1
+
+        smooth_loss = 0.5 *d[smooth_regime] ** 2
+        linear_loss = d[smooth_regime == 0] - 0.5
         losses = torch.cat((smooth_loss, linear_loss))
 
         if weight is not None:
