@@ -21,7 +21,24 @@ class RafAnalyzer:
 
         #self.triplets = defaultdict([])
         self.triplets = np.empty((0,8))
+    def scalar_values_3d_py(self, field, x, y, default_v=-1, scale=None):
+        values_np = np.full((field.shape[0], x.shape[0],), default_v, dtype=np.float32)
 
+        for i in range(values_np.shape[1]):
+            if scale is not None:
+              csigma = scale[i]
+            else:
+              csigma = 1.0
+            cx = x[i]
+            cy = y[i]
+            minx = (np.clip(cx - 0.5*csigma, a_min=0, a_max=field.shape[1] - 1)).astype(np.int64)
+            maxx = (np.clip(cx + 0.5*csigma, a_min=minx + 1, a_max=field.shape[1])).astype(np.int64)
+            miny = (np.clip(cy - 0.5*csigma, a_min=0, a_max=field.shape[0] - 1)).astype(np.int64)
+            maxy = (np.clip(cy + 0.5*csigma, a_min=miny + 1, a_max=field.shape[0])).astype(np.int64)
+
+            values_np[:, i] = np.amax(field[:, miny:maxy, minx:maxx], axis=(1,2))
+
+        return values_np
     def fill_single(self, all_fields, meta: headmeta.Raf):
         start = time.perf_counter()
         raf = all_fields[meta.head_index]
@@ -35,13 +52,12 @@ class RafAnalyzer:
                 nine[(1, 2, 3, 4, 5, 6, 7, 8), :] *= meta.stride
             else:
                 nine[(1, 2, 3, 4, 5, 6), :] *= meta.stride
-
-            cifhr_values = scalar_values_3d(self.cifhr, nine[1], nine[2], default=0.0)
+            cifhr_values = self.scalar_values_3d_py(self.cifhr, nine[1], nine[2], default_v=0.0, scale=nine[7] if nine.shape[0] == 9 else None)
             cifhr_s = np.max(cifhr_values, axis=0)
             index_s = np.amax(cifhr_values, axis=0)
             nine[0] = nine[0] * (self.cif_floor + (1.0 - self.cif_floor) * cifhr_s)
 
-            cifhr_values = scalar_values_3d(self.cifhr, nine[3], nine[4], default=0.0)
+            cifhr_values = self.scalar_values_3d_py(self.cifhr, nine[3], nine[4], default_v=0.0, scale=nine[8] if nine.shape[0] == 9 else None)
             cifhr_o = np.max(cifhr_values, axis=0)
             index_o = np.amax(cifhr_values, axis=0)
             nine[0] = nine[0] * (self.cif_floor + (1.0 - self.cif_floor) * cifhr_o)
