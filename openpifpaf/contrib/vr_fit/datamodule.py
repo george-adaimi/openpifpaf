@@ -165,6 +165,30 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
             openpifpaf.transforms.Encoders(encoders),
         ])
 
+    def debugger_loader(self):
+        encoders = (openpifpaf.encoder.CifDet(self.head_metas[0]),
+                    Raf(self.head_metas[1]),)
+
+        preprocess = openpifpaf.transforms.Compose([
+            openpifpaf.transforms.NormalizeAnnotations(),
+            openpifpaf.transforms.CenterPadTight(16),
+            openpifpaf.transforms.EVAL_TRANSFORM,
+            openpifpaf.transforms.Encoders(encoders),
+        ])
+
+        train_data = VisualRelationship(
+            image_dir=self.train_image_dir,
+            ann_file=self.train_annotations,
+            preprocess=preprocess,
+            n_images=self.n_images,
+            objlabel2fit=self.objlabel2fit,
+            rellabel2fit=self.rellabel2fit
+        )
+        return torch.utils.data.DataLoader(
+            train_data, batch_size=self.batch_size, shuffle=False,
+            pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=True,
+            collate_fn=openpifpaf.datasets.collate_images_targets_meta)
+
     def train_loader(self):
         train_data = VisualRelationship(
             image_dir=self.train_image_dir,
