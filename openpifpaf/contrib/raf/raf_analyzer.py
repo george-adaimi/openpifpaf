@@ -31,10 +31,10 @@ class RafAnalyzer:
               csigma = 1.0
             cx = x[i]
             cy = y[i]
-            minx = (np.clip(cx - 0.5*csigma, a_min=0, a_max=field.shape[1] - 1)).astype(np.int64)
-            maxx = (np.clip(cx + 0.5*csigma, a_min=minx + 1, a_max=field.shape[1])).astype(np.int64)
-            miny = (np.clip(cy - 0.5*csigma, a_min=0, a_max=field.shape[0] - 1)).astype(np.int64)
-            maxy = (np.clip(cy + 0.5*csigma, a_min=miny + 1, a_max=field.shape[0])).astype(np.int64)
+            minx = (np.clip(cx - 0.5*csigma, a_min=0, a_max=field.shape[2] - 1)).astype(np.int64)
+            maxx = (np.clip(cx + 0.5*csigma, a_min=minx + 1, a_max=field.shape[2])).astype(np.int64)
+            miny = (np.clip(cy - 0.5*csigma, a_min=0, a_max=field.shape[1] - 1)).astype(np.int64)
+            maxy = (np.clip(cy + 0.5*csigma, a_min=miny + 1, a_max=field.shape[1])).astype(np.int64)
 
             values_np[:, i] = np.amax(field[:, miny:maxy, minx:maxx], axis=(1,2))
 
@@ -54,12 +54,12 @@ class RafAnalyzer:
                 nine[(1, 2, 3, 4, 5, 6), :] *= meta.stride
             cifhr_values = self.scalar_values_3d_py(self.cifhr, nine[1], nine[2], default_v=0.0, scale=nine[7] if nine.shape[0] == 9 else None)
             cifhr_s = np.max(cifhr_values, axis=0)
-            index_s = np.amax(cifhr_values, axis=0)
+            index_s = np.argmax(cifhr_values, axis=0)
             nine[0] = nine[0] * (self.cif_floor + (1.0 - self.cif_floor) * cifhr_s)
 
             cifhr_values = self.scalar_values_3d_py(self.cifhr, nine[3], nine[4], default_v=0.0, scale=nine[8] if nine.shape[0] == 9 else None)
             cifhr_o = np.max(cifhr_values, axis=0)
-            index_o = np.amax(cifhr_values, axis=0)
+            index_o = np.argmax(cifhr_values, axis=0)
             nine[0] = nine[0] * (self.cif_floor + (1.0 - self.cif_floor) * cifhr_o)
             #self.triplets[index_s].append([nine[0], index_s, nine[1], nine[2], raf_i, index_o, nine[3], nine[4], False])
             self.triplets = np.concatenate((self.triplets, np.column_stack([nine[0], index_s, nine[1], nine[2], [raf_i]*nine[0].shape[0], index_o, nine[3], nine[4]])))

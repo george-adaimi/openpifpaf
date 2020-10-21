@@ -10,6 +10,7 @@ import heapq
 import numpy as np
 
 from openpifpaf.annotation import AnnotationDet
+from .annotation import AnnotationRaf
 from .raf_analyzer import RafAnalyzer
 from openpifpaf.decoder import Decoder, utils
 from .headmeta import Raf
@@ -102,7 +103,7 @@ class CifDetRaf(Decoder):
         raf_analyzer = RafAnalyzer(cifdethr.accumulated).fill(fields, self.raf_metas)
 
         occupied = utils.Occupancy(cifdethr.accumulated.shape, 2, min_scale=4)
-        annotations = []
+        annotations_det = []
 
 
         def mark_occupied(ann):
@@ -117,18 +118,21 @@ class CifDetRaf(Decoder):
             if occupied.get(f, x, y):
                 continue
             ann = AnnotationDet(self.cifdet_metas[0].categories).set(f + 1, v, (x - w/2.0, y - h/2.0, w, h))
-            annotations.append(ann)
+            annotations_det.append(ann)
             #mark_occupied(ann)
             occupied.set(f, x, y, 0.1 * min(w, h))
         dict_rel = {}
 
+        if self.nms is not None:
+            annotations_det = self.nms.annotations(annotations_det)
+
+        annotations = []
         for raf_v, index_s, x_s, y_s, raf_i, index_o, x_o, y_o in raf_analyzer.triplets:
             s_idx = None
             o_idx = None
             min_value_s = None
             min_value_o = None
-            for ann_idx, ann in enumerate(annotations):
-                import pdb; pdb.set_trace()
+            for ann_idx, ann in enumerate(annotations_det):
                 if not(ann.category_id-1 == index_s or ann.category_id-1 == index_o):
                     continue
                 a = ann.bbox[0] + ann.bbox[2]/2.0
@@ -142,22 +146,30 @@ class CifDetRaf(Decoder):
                     min_value_o = curr_dist
                     o_idx = ann_idx
             if (s_idx, raf_i, o_idx) in dict_rel:
-                dict_rel[(s_idx, raf_i, o_idx)][0] += raf_v
+                annotations[dict_rel[(s_idx, raf_i, o_idx)]-1].score_rel += raf_v
             else:
-                try:
-                    dict_rel[(s_idx, raf_i, o_idx)] = [raf_v, annotations[s_idx].score, annotations[o_idx].score]
-                except:
-                    import pdb; pdb.set_trace()
-        import pdb; pdb.set_trace()
+                if s_idx and o_idx:
+                    category_id_obj = annotations_det[o_idx].category_id
+                    category_id_sub = annotations_det[s_idx].category_id
+                    category_id_rel = int(raf_i) + 1
+                    score_sub = annotations_det[s_idx].score
+                    score_rel = raf_v
+                    score_obj = annotations_det[o_idx].score
+                    bbox_sub = annotations_det[s_idx].bbox
+                    bbox_obj = annotations_det[o_idx].bbox
+                    ann = AnnotationRaf(self.raf_metas[0].obj_categories,
+                                        self.raf_metas[0].rel_categories).set(
+                                            category_id_obj, category_id_sub,
+                                            category_id_rel, score_sub,
+                                            score_rel, score_obj,
+                                            bbox_sub, bbox_obj)
+                    annotations.append(ann)
+                    dict_rel[(s_idx, raf_i, o_idx)] = len(annotations)
+
         self.occupancy_visualizer.predicted(occupied)
 
         LOG.debug('annotations %d, %.3fs', len(annotations), time.perf_counter() - start)
 
-        if self.nms is not None:
-            annotations = self.nms.annotations(annotations)
-
-        LOG.info('%d annotations: %s', len(annotations),
-                 [np.sum(ann.data[:, 2] > 0.1) for ann in annotations])
         return annotations
 
     # def connection_value(self, ann, raf_scored, start_i, end_i, *, reverse_match=True):
