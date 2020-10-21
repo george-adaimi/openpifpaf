@@ -1,3 +1,12 @@
+import numpy as np
+
+try:
+    import matplotlib
+    import matplotlib.animation
+    import matplotlib.collections
+    import matplotlib.patches
+except ImportError:
+    matplotlib = None
 
 class RelationPainter:
     def __init__(self, *, xy_scale=1.0):
