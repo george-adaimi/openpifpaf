@@ -4,10 +4,10 @@ import numpy as np
 
 # pylint: disable=import-error
 from openpifpaf.functional import scalar_square_add_gauss_with_max
-from openpifpaf.decoder import CifHr
+from openpifpaf.decoder import utils
 LOG = logging.getLogger(__name__)
 
-class FullCifDetHr(CifHr):
+class FullCifDetHr(utils.CifHr):
     def accumulate(self, len_cifs, t, p, stride, min_scale):
         p = p[:, p[0] > self.v_threshold]
         if min_scale:
