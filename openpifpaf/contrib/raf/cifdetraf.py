@@ -4,6 +4,7 @@ import heapq
 import logging
 import time
 import math
+import copy
 from typing import List
 
 import heapq
@@ -137,11 +138,11 @@ class CifDetRaf(Decoder):
                     continue
                 a = ann.bbox[0] + ann.bbox[2]/2.0
                 b = ann.bbox[1] + ann.bbox[3]/2.0
-                curr_dist = 1/(raf_v+0.00001)*(math.sqrt((a - x_s)**2+(b - y_s)**2))
+                curr_dist = (1/(raf_v*ann.score+0.00001))*(math.sqrt((a - x_s)**2+(b - y_s)**2))
                 if min_value_s is None or curr_dist<min_value_s:
                     min_value_s = curr_dist
                     s_idx = ann_idx
-                curr_dist = 1/(raf_v+0.00001)*(math.sqrt((a - x_o)**2+(b - y_o)**2))
+                curr_dist = (1/(raf_v*ann.score+0.00001))*(math.sqrt((a - x_o)**2+(b - y_o)**2))
                 if min_value_o is None or curr_dist<min_value_o:
                     min_value_o = curr_dist
                     o_idx = ann_idx
@@ -155,8 +156,8 @@ class CifDetRaf(Decoder):
                     score_sub = annotations_det[s_idx].score
                     score_rel = raf_v
                     score_obj = annotations_det[o_idx].score
-                    bbox_sub = annotations_det[s_idx].bbox
-                    bbox_obj = annotations_det[o_idx].bbox
+                    bbox_sub = copy.deepcopy(annotations_det[s_idx].bbox)
+                    bbox_obj = copy.deepcopy(annotations_det[o_idx].bbox)
                     ann = AnnotationRaf(self.raf_metas[0].obj_categories,
                                         self.raf_metas[0].rel_categories).set(
                                             category_id_obj, category_id_sub,
