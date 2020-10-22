@@ -1,6 +1,27 @@
 import numpy as np
 from openpifpaf.annotation import Base
 
+def annotation_inverse(ann, meta):
+    angle = -meta['rotation']['angle']
+    if angle != 0.0:
+        rw = meta['rotation']['width']
+        rh = meta['rotation']['height']
+        ann.bbox_sub = utils.rotate_box(ann.bbox_sub, rw - 1, rh - 1, angle)
+        ann.bbox_obj = utils.rotate_box(ann.bbox_obj, rw - 1, rh - 1, angle)
+
+    ann.bbox_sub[:2] += meta['offset']
+    ann.bbox_sub[:2] /= meta['scale']
+    ann.bbox_sub[2:] /= meta['scale']
+
+    ann.bbox_obj[:2] += meta['offset']
+    ann.bbox_obj[:2] /= meta['scale']
+    ann.bbox_obj[2:] /= meta['scale']
+
+    if meta['hflip']:
+        w = meta['width_height'][0]
+        ann.bbox_sub[0] = -(ann.bbox_sub[0] + ann.bbox_sub[2]) - 1.0 + w
+        ann.bbox_obj[0] = -(ann.bbox_obj[0] + ann.bbox_obj[2]) - 1.0 + w
+
 class AnnotationRaf(Base):
     def __init__(self, obj_categories, rel_categories):
         self.obj_categories = obj_categories
