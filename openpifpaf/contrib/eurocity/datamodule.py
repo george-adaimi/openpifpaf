@@ -74,6 +74,8 @@ class EuroCityModule(openpifpaf.datasets.DataModule):
         group.add_argument('--eurocity-orientation-invariant',
                            default=cls.orientation_invariant, type=float,
                            help='augment with random orientations')
+        parser.add_argument('--eurocity-split', choices=('val', 'test'), default='val',
+                            help='dataset to evaluate')
         assert cls.augmentation
         group.add_argument('--eurocity-no-augmentation',
                            dest='eurocity_augmentation',
@@ -108,6 +110,12 @@ class EuroCityModule(openpifpaf.datasets.DataModule):
         cls.train_image_dir = args.eurocity_train_image_dir
         cls.val_image_dir = args.eurocity_val_image_dir
 
+<<<<<<< HEAD
+        if args.eurocity_split == 'test':
+            cls.eval_image_dir = "./data/ECP/{}/img/test"
+            cls.eval_annotations = None
+=======
+>>>>>>> 2a62089c5bd80c994987d0d192369f4704334b3f
         cls.n_images = args.eurocity_n_images
         cls.square_edge = args.eurocity_square_edge
         cls.extended_scale = args.eurocity_extended_scale
