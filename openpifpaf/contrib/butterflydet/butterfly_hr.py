@@ -62,8 +62,13 @@ class ButterflyHr(utils.CifHr):
         # Occupancy covers 2sigma.
         # Restrict this accumulation to 1sigma so that seeds for the same joint
         # are properly suppressed.
+        if self.fullfields:
+            cifdet_nn = np.clip((w/stride)*(h/stride), a_min=16, a_max= None)
+            #cifdet_nn = 1
+        else:
+            cifdet_nn = self.neighbors
         scalar_square_add_2dgauss(
-            t, x, y, s_w, s_h, (v / self.neighbors).astype(np.float32), truncate=0.5)
+            t, x, y, s_w, s_h, (v / cifdet_nn).astype(np.float32), truncate=0.5)
 
         cumulative_average_2d(scale_w, n_sw, x, y, s_w, s_h, (s_w), v)
         cumulative_average_2d(scale_h, n_sh, x, y, s_w, s_h, (s_h), v)

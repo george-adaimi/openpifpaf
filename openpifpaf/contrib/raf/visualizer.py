@@ -50,7 +50,7 @@ class Raf(Base):
     def _confidences(self, confidences):
         if not self.show_confidences:
             return
-        indices = np.arange(confidences.shape[0])[np.nanmax(confidences, axis=(1,2))>0.3]
+        indices = np.arange(confidences.shape[0])[np.nanmax(confidences, axis=(1,2))>0.1]
 
         for f in indices:
             #LOG.debug('%s,%s',
@@ -68,7 +68,7 @@ class Raf(Base):
                      annotations=None, confidence_fields=None, uv_is_offset=True):
         if not self.show_regressions:
             return
-        indices = np.arange(confidence_fields.shape[0])[np.nanmax(confidence_fields, axis=(1,2))>0.3]
+        indices = np.arange(confidence_fields.shape[0])[np.nanmax(confidence_fields, axis=(1,2))>0.1]
         for f in indices:
             #LOG.debug('%s,%s',
             #          self.keypoints[self.skeleton[f][0] - 1],

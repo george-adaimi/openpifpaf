@@ -8,6 +8,8 @@ import openpifpaf
 from .visdrone import VisDrone
 from .constants import BBOX_KEYPOINTS, BBOX_HFLIP
 from . import metric
+from ..butterflydet.fullbutterfly import FullButterfly
+
 class VisDroneModule(openpifpaf.datasets.DataModule):
     train_image_dir = "data/VisDrone2019/VisDrone2019-DET-train/images"
     val_image_dir = "data/VisDrone2019/VisDrone2019-DET-val/images"
@@ -31,6 +33,7 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
     eval_orientation_invariant = 0.0
     eval_extended_scale = False
     categories = ("pedestrian", "people", "bicycle", "car", "van", "truck", "tricycle", "awning-tricycle", "bus", "motor")
+    full_butterfly = False
     def __init__(self):
         super().__init__()
 
@@ -79,6 +82,9 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
         group.add_argument('--visdrone-upsample',
                            default=cls.upsample_stride, type=int,
                            help='head upsample stride')
+        group.add_argument('--visdrone-full-butterfly',
+                           default=False, action='store_true',
+                           help='use full butterfly')
 
     @classmethod
     def configure(cls, args: argparse.Namespace):
@@ -102,6 +108,7 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
         cls.augmentation = args.visdrone_augmentation
         cls.rescale_images = args.visdrone_rescale_images
         cls.upsample_stride = args.visdrone_upsample
+        cls.full_butterfly = args.visdrone_full_butterfly
 
     @staticmethod
     def _convert_data(parent_data, meta):
@@ -115,7 +122,10 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
         return image, anns, meta
 
     def _preprocess(self):
-        enc = openpifpaf.encoder.CifDet(self.head_metas[0])
+        if self.full_butterfly:
+            enc = FullButterfly(self.head_metas[0])
+        else:
+            enc = openpifpaf.encoder.CifDet(self.head_metas[0])
 
         if not self.augmentation:
             return openpifpaf.transforms.Compose([
@@ -194,8 +204,8 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
             rescale_t = openpifpaf.transforms.RescaleAbsolute(self.eval_long_edge)
         padding_t = None
         if self.batch_size == 1:
-            padding_t = openpifpaf.transforms.CenterPadTight(16)
-            #padding_t = openpifpaf.transforms.CenterPadTight(32)
+            #padding_t = openpifpaf.transforms.CenterPadTight(16)
+            padding_t = openpifpaf.transforms.CenterPadTight(32)
         else:
             assert self.eval_long_edge
             padding_t = openpifpaf.transforms.CenterPad(self.eval_long_edge)

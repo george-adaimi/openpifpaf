@@ -7,6 +7,7 @@ import openpifpaf
 
 from .uavdt import UAVDT
 from .constants import BBOX_KEYPOINTS, BBOX_HFLIP
+from . import metric
 
 class UAVDTModule(openpifpaf.datasets.DataModule):
     train_image_dir = "data/UAV-benchmark-M/train/"
@@ -78,6 +79,9 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
         group.add_argument('--uavdt-upsample',
                            default=cls.upsample_stride, type=int,
                            help='head upsample stride')
+        group.add_argument('--upsample-full-butterfly',
+                           default=False, action='store_true',
+                           help='use full butterfly')
 
     @classmethod
     def configure(cls, args: argparse.Namespace):
@@ -98,6 +102,7 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
         cls.augmentation = args.uavdt_augmentation
         cls.rescale_images = args.uavdt_rescale_images
         cls.upsample_stride = args.uavdt_upsample
+        cls.full_butterfly = args.upsample_full_butterfly
 
     @staticmethod
     def _convert_data(parent_data, meta):
@@ -111,7 +116,10 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
         return image, anns, meta
 
     def _preprocess(self):
-        enc = openpifpaf.encoder.CifDet(self.head_metas[0])
+        if self.full_butterfly:
+            enc = FullButterfly(self.head_metas[0])
+        else:
+            enc = openpifpaf.encoder.CifDet(self.head_metas[0])
 
         if not self.augmentation:
             return openpifpaf.transforms.Compose([
@@ -178,37 +186,33 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=True,
             collate_fn=openpifpaf.datasets.collate_images_targets_meta)
 
-    @staticmethod
-    def _eval_preprocess():
+    def _eval_preprocess(self):
         rescale_t = None
         if self.eval_extended_scale:
             assert self.eval_long_edge
-            rescale_t = [
-                openpifpaf.transforms.DeterministicEqualChoice([
+            rescale_t = openpifpaf.transforms.DeterministicEqualChoice([
                     openpifpaf.transforms.RescaleAbsolute(self.eval_long_edge),
                     openpifpaf.transforms.RescaleAbsolute((self.eval_long_edge) // 2),
                 ], salt=1)
-            ]
+
         elif self.eval_long_edge:
-            rescale_t = [openpifpaf.transforms.RescaleAbsolute(self.eval_long_edge)]
+            rescale_t = openpifpaf.transforms.RescaleAbsolute(self.eval_long_edge)
 
         if self.batch_size == 1:
-            padding_t = [transforms.CenterPadTight(16)]
-            #padding_t = [openpifpaf.transforms.CenterPadTight(32)]
+            #padding_t = [openpifpaf.transforms.CenterPadTight(16)]
+            padding_t = openpifpaf.transforms.CenterPadTight(32)
         else:
             assert self.eval_long_edge
-            padding_t = [openpifpaf.transforms.CenterPad(self.eval_long_edge)]
+            padding_t = openpifpaf.transforms.CenterPad(self.eval_long_edge)
 
         orientation_t = None
         if self.eval_orientation_invariant:
-            orientation_t = [
-                openpifpaf.transforms.DeterministicEqualChoice([
+            orientation_t = openpifpaf.transforms.DeterministicEqualChoice([
                     None,
                     openpifpaf.transforms.RotateBy90(fixed_angle=90),
                     openpifpaf.transforms.RotateBy90(fixed_angle=180),
                     openpifpaf.transforms.RotateBy90(fixed_angle=270),
                 ], salt=3)
-            ]
 
         return openpifpaf.transforms.Compose([
             openpifpaf.transforms.NormalizeAnnotations(),
@@ -235,3 +239,9 @@ class UAVDTModule(openpifpaf.datasets.DataModule):
             eval_data, batch_size=self.batch_size, shuffle=False,
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=False,
             collate_fn=openpifpaf.datasets.collate_images_anns_meta)
+
+    def metrics(self):
+        return [metric.UAVDT(
+            self.eval_annotations,
+            self.eval_image_dir,
+        )]

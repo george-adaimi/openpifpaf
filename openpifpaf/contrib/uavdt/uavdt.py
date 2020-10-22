@@ -171,19 +171,3 @@ class UAVDT(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.imgs)
-
-    def write_evaluations(self, eval_class, path, total_time):
-        dict_folder = defaultdict(list)
-        for annotation in eval_class.predictions:
-            x, y, w, h = annotation['bbox']
-            categ = int(annotation['category_id'])
-            fileName = annotation['file_dir']
-            fileName = fileName.split("/")
-            folder = fileName[-2]
-            image_numb = int(fileName[-1][3:9])
-            dict_folder[folder].append(",".join(list(map(str,[image_numb, -1, x, y, w, h, annotation['score'], 1, categ-1]))))
-
-        for folder in dict_folder.keys():
-            mkdir_if_missing(path)
-            with open(os.path.join(path,folder+".txt"), "w") as file:
-                file.write("\n".join(dict_folder[folder]))

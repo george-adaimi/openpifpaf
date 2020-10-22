@@ -61,6 +61,7 @@ def configure(args):
     Canvas.image_min_dpi = args.image_min_dpi
     Canvas.out_file_extension = args.show_file_extension
 
+
     KeypointPainter.show_box = args.show_box
     KeypointPainter.show_joint_scales = args.show_joint_scales
     KeypointPainter.show_joint_confidences = args.show_joint_confidences
