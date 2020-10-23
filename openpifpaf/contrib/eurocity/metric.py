@@ -146,19 +146,11 @@ class EuroCity(Base):
                 with open(os.path.join(filename, time, self.mode, imageName), "w") as file:
                     json.dump(self.predictions[time][imageName], file)
 
-<<<<<<< HEAD
             LOG.info('wrote predictions to %s', filename)
             with zipfile.ZipFile(os.path.join(filename,'predictions_{}'.format(time))+ '.zip', 'w') as myzip:
                 for imageName in self.predictions[time].keys():
                     myzip.write(os.path.join(filename,imageName))
             LOG.info('wrote %s.zip', os.path.join(filename,'predictions_{}'.format(time))+ '.zip')
-=======
-        LOG.info('wrote predictions to %s', filename)
-        with zipfile.ZipFile(os.path.join(filename,'predictions')+ '.zip', 'w') as myzip:
-            for imageName in self.predictions.keys():
-                myzip.write(os.path.join(filename,imageName))
-        LOG.info('wrote %s.zip', os.path.join(filename,'predictions')+ '.zip')
->>>>>>> 2a62089c5bd80c994987d0d192369f4704334b3f
 
         if additional_data:
             with open(os.path.join(filename, 'predictions.pred_meta.json'), 'w') as f:
@@ -166,22 +158,15 @@ class EuroCity(Base):
             LOG.info('wrote %s.pred_meta.json', filename)
 
     def stats(self):
-<<<<<<< HEAD
         if self.gt:
             return {}
-=======
->>>>>>> 2a62089c5bd80c994987d0d192369f4704334b3f
         data = []
         for time in self.predictions.keys():
             for key, item in self.predictions[time].items():
                 data.append({'gt': self.gt[time][key], 'det': item})
-<<<<<<< HEAD
+
             results_pedestrian = evaluate_detection(data.copy(), eval_type='pedestrian')
             results_rider = evaluate_detection(data.copy(), eval_type='rider')
-=======
-            results_pedestrian = evaluate_detection(data, eval_type='pedestrian')
-            results_rider = evaluate_detection(data, eval_type='rider')
->>>>>>> 2a62089c5bd80c994987d0d192369f4704334b3f
 
             stats = []
             text_labels = []

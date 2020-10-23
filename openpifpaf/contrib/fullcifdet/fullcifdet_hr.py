@@ -4,7 +4,7 @@ import numpy as np
 
 # pylint: disable=import-error
 from openpifpaf.functional import scalar_square_add_gauss_with_max
-from openpifpaf.decoder import CifHr
+from openpifpaf.decoder.utils import CifHr
 LOG = logging.getLogger(__name__)
 
 class FullCifDetHr(CifHr):

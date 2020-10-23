@@ -5,7 +5,7 @@ import numpy as np
 # pylint: disable=import-error
 from openpifpaf.functional import scalar_values
 from openpifpaf import headmeta
-from openpifpaf.decoder import CifSeeds
+from openpifpaf.decoder.utils import CifSeeds
 
 LOG = logging.getLogger(__name__)
 

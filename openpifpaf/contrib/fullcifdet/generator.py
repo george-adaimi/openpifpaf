@@ -1,12 +1,11 @@
 import logging
 import time
 
-from openpifpaf.decoder.generator import CifDet
+from openpifpaf.decoder import CifDet
 from openpifpaf.annotation import AnnotationDet
 from .fullcifdet_hr import FullCifDetHr
 from .fullcifdet_seeds import FullCifDetSeeds
-from openpifpaf.decoder import nms
-from openpifpaf.decoder.occupancy import Occupancy
+from openpifpaf.decoder import utils
 from openpifpaf import headmeta, visualizer
 
 LOG = logging.getLogger(__name__)
@@ -31,7 +30,7 @@ class FullCifDet(CifDet):
                 vis.predicted(fields[meta.head_index])
         cifhr = FullCifDetHr().fill(fields, self.metas)
         seeds = FullCifDetSeeds(cifhr.accumulated).fill(fields, self.metas)
-        occupied = Occupancy(cifhr.accumulated.shape, 2, min_scale=2.0)
+        occupied = utils.Occupancy(cifhr.accumulated.shape, 2, min_scale=2.0)
 
         annotations = []
         for v, f, x, y, w, h in seeds.get():
@@ -44,7 +43,7 @@ class FullCifDet(CifDet):
 
         self.occupancy_visualizer.predicted(occupied)
 
-        annotations = nms.Detection().annotations_per_category(annotations, nms_type='snms')
+        annotations = utils.nms.Detection().annotations_per_category(annotations, nms_type='snms')
         #annotations = nms.Detection().annotations(annotations)
         # annotations = sorted(annotations, key=lambda a: -a.score)
 

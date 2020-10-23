@@ -110,12 +110,10 @@ class EuroCityModule(openpifpaf.datasets.DataModule):
         cls.train_image_dir = args.eurocity_train_image_dir
         cls.val_image_dir = args.eurocity_val_image_dir
 
-<<<<<<< HEAD
         if args.eurocity_split == 'test':
             cls.eval_image_dir = "./data/ECP/{}/img/test"
             cls.eval_annotations = None
-=======
->>>>>>> 2a62089c5bd80c994987d0d192369f4704334b3f
+
         cls.n_images = args.eurocity_n_images
         cls.square_edge = args.eurocity_square_edge
         cls.extended_scale = args.eurocity_extended_scale
