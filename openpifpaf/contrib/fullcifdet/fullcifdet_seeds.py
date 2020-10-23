@@ -5,11 +5,11 @@ import numpy as np
 # pylint: disable=import-error
 from openpifpaf.functional import scalar_values
 from openpifpaf import headmeta
-from openpifpaf.decoder.utils import CifSeeds
+from openpifpaf.decoder import utils
 
 LOG = logging.getLogger(__name__)
 
-class FullCifDetSeeds(CifSeeds):
+class FullCifDetSeeds(utils.CifSeeds):
     def fill_single(self, all_fields, meta: headmeta.CifDet):
         start = time.perf_counter()
 

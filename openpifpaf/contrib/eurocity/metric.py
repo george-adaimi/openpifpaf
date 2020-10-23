@@ -160,6 +160,7 @@ class EuroCity(Base):
     def stats(self):
         if self.gt:
             return {}
+
         data = []
         for time in self.predictions.keys():
             for key, item in self.predictions[time].items():
