@@ -1,4 +1,8 @@
 import numpy as np
+from graphviz import Digraph
+from collections import defaultdict
+
+import colorsys
 
 try:
     import matplotlib
@@ -11,6 +15,9 @@ except ImportError:
 class RelationPainter:
     def __init__(self, *, xy_scale=1.0):
         self.xy_scale = xy_scale
+        self.G = Digraph(format='png')
+        self.dict_nodes = defaultdict(lambda: defaultdict(str))
+        self.node_count = 0
 
     def annotations(self, ax, annotations, *,
                     color=None, colors=None, texts=None, subtexts=None):
@@ -48,6 +55,43 @@ class RelationPainter:
                 subtext_rel = '{:.0%}'.format(ann.score_rel)
 
             self.annotation(ax, ann, color=(this_color_sub, this_color_rel,this_color_obj), text=(text_sub, text_rel, text_obj), subtext=(subtext_sub, subtext_rel, subtext_obj))
+            self.draw_graph(ann, color=(this_color_sub, this_color_rel,this_color_obj), text=(text_sub, text_rel, text_obj))
+        self.G.render('all-images/scene-graph.gv', view=False)
+
+    def draw_graph(self, ann, color=None, text=None):
+        if color is None:
+            color_sub = 0
+            color_obj = 0
+            color_rel = 0
+
+        if isinstance(color[0], (int, np.integer)):
+            color_sub = matplotlib.cm.get_cmap('tab20')((color[0] % 20 + 0.05) / 20)
+            color_sub = colorsys.rgb_to_hsv(color_sub[0], color_sub[1], color_sub[2])
+        if isinstance(color[1], (int, np.integer)):
+            color_rel = matplotlib.cm.get_cmap('tab20')((color[1] % 20 + 0.05) / 20)
+            color_rel = colorsys.rgb_to_hsv(color_rel[0], color_rel[1], color_rel[2])
+        if isinstance(color[2], (int, np.integer)):
+            color_obj = matplotlib.cm.get_cmap('tab20')((color[2] % 20 + 0.05) / 20)
+            color_obj = colorsys.rgb_to_hsv(color_obj[0], color_obj[1], color_obj[2])
+
+
+        if ann.category_id_sub in self.dict_nodes and tuple(ann.bbox_sub) in self.dict_nodes[ann.category_id_sub].keys():
+            node_id_sub = self.dict_nodes[ann.category_id_sub][tuple(ann.bbox_sub)]
+        else:
+            self.node_count = self.node_count + 1
+            node_id_sub = str(self.node_count)
+            self.dict_nodes[ann.category_id_sub][tuple(ann.bbox_sub)] = node_id_sub
+
+        if ann.category_id_obj in self.dict_nodes and tuple(ann.bbox_obj) in self.dict_nodes[ann.category_id_obj].keys():
+            node_id_obj = self.dict_nodes[ann.category_id_obj][tuple(ann.bbox_obj)]
+        else:
+            self.node_count = self.node_count + 1
+            node_id_obj = str(self.node_count)
+            self.dict_nodes[ann.category_id_obj][tuple(ann.bbox_obj)] = node_id_obj
+
+        self.G.node(node_id_sub, label=text[0], color="%f, %f, %f" % (color_sub[0], color_sub[1], color_sub[2]))
+        self.G.node(node_id_obj, label=text[2], color="%f, %f, %f" % (color_obj[0], color_obj[1], color_obj[2]))
+        self.G.edge(node_id_sub, node_id_obj, label=text[1], fillcolor="%f, %f, %f" % (color_rel[0], color_rel[1], color_rel[2]))
 
     def annotation(self, ax, ann, *, color=None, text=None, subtext=None):
         if color is None:
@@ -64,7 +108,6 @@ class RelationPainter:
 
         # SUBJECT
         x, y, w, h = ann.bbox_sub * self.xy_scale
-        w, h = 10, 10
         if w < 5.0:
             x -= 2.0
             w += 4.0
@@ -101,7 +144,6 @@ class RelationPainter:
 
         # OBJECT
         x, y, w, h = ann.bbox_obj * self.xy_scale
-        w, h = 10, 10
         if w < 5.0:
             x -= 2.0
             w += 4.0

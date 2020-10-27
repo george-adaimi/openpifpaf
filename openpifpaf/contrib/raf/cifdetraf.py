@@ -134,8 +134,8 @@ class CifDetRaf(Decoder):
             min_value_s = None
             min_value_o = None
             for ann_idx, ann in enumerate(annotations_det):
-                if not(ann.category_id-1 == index_s or ann.category_id-1 == index_o):
-                    continue
+                # if not(ann.category_id-1 == index_s or ann.category_id-1 == index_o):
+                #     continue
                 a = ann.bbox[0] + ann.bbox[2]/2.0
                 b = ann.bbox[1] + ann.bbox[3]/2.0
                 curr_dist = (1/(raf_v*ann.score+0.00001))*(math.sqrt((a - x_s)**2+(b - y_s)**2))
@@ -149,7 +149,7 @@ class CifDetRaf(Decoder):
             if (s_idx, raf_i, o_idx) in dict_rel:
                 annotations[dict_rel[(s_idx, raf_i, o_idx)]-1].score_rel += raf_v
             else:
-                if s_idx and o_idx:
+                if s_idx is not None and o_idx is not None:
                     category_id_obj = annotations_det[o_idx].category_id
                     category_id_sub = annotations_det[s_idx].category_id
                     category_id_rel = int(raf_i) + 1
