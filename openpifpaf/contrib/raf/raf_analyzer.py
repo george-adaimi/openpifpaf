@@ -12,7 +12,7 @@ from . import headmeta
 LOG = logging.getLogger(__name__)
 
 class RafAnalyzer:
-    default_score_th = 0.1
+    default_score_th = 0.2
 
     def __init__(self, cifhr, *, score_th=None, cif_floor=0.1):
         self.cifhr = cifhr
