@@ -72,8 +72,8 @@ class Shell2Scale(torch.nn.Module):
                     logb_component_indices,
                     stride):
         mask = reduced_h[0] > original_h[0][:, :,
-                                            :stride*reduced_h[0].shape[2]:stride,
-                                            :stride*reduced_h[0].shape[3]:stride]
+                                            :stride * reduced_h[0].shape[2]:stride,
+                                            :stride * reduced_h[0].shape[3]:stride]
         mask_vector = torch.stack((mask, mask), dim=2)
 
         for ci, (original_c, reduced_c) in enumerate(zip(original_h, reduced_h)):
@@ -89,12 +89,14 @@ class Shell2Scale(torch.nn.Module):
 
             if len(original_c.shape) == 4:
                 original_c[:, :,
-                           :stride*reduced_c.shape[2]:stride,
-                           :stride*reduced_c.shape[3]:stride][mask] = reduced_c[mask]
+                           :stride * reduced_c.shape[2]:stride,
+                           :stride * reduced_c.shape[3]:stride][mask] = \
+                    reduced_c[mask]
             elif len(original_c.shape) == 5:
                 original_c[:, :, :,
-                           :stride*reduced_c.shape[3]:stride,
-                           :stride*reduced_c.shape[4]:stride][mask_vector] = reduced_c[mask_vector]
+                           :stride * reduced_c.shape[3]:stride,
+                           :stride * reduced_c.shape[4]:stride][mask_vector] = \
+                    reduced_c[mask_vector]
             else:
                 raise Exception('cannot process component with shape {}'
                                 ''.format(original_c.shape))
@@ -190,6 +192,7 @@ def model_migration(net_cpu):
             hn.meta.head_index = hn_i
         if hn.meta.name == 'cif' and 'score_weights' not in vars(hn.meta):
             hn.meta.score_weights = [3.0] * 3 + [1.0] * (hn.meta.n_fields - 3)
+
     for mm in MODEL_MIGRATION:
         mm(net_cpu)
 
@@ -201,9 +204,16 @@ def model_defaults(net_cpu):
             # (only seen sometimes when training with GPU)
             # Variances in pretrained models can be as low as 1e-17.
             # m.running_var.clamp_(min=1e-8)
-            m.eps = 1e-3  # tf default is 0.001
+            # m.eps = 1e-3  # tf default is 0.001
             # m.eps = 1e-5  # pytorch default
 
-            # less momentum for variance and expectation
+            # This epsilon only appears inside a sqrt in the denominator,
+            # i.e. the effective epsilon for division is much bigger than the
+            # given eps.
+            # See equation here:
+            # https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
+            m.eps = 1e-5
+
+            # smaller step size for running std and mean update
             m.momentum = 0.01  # tf default is 0.99
             # m.momentum = 0.1  # pytorch default

@@ -83,7 +83,8 @@ class Resnet(BaseNetwork):
         # input pool
         if self.pool0_stride:
             if self.pool0_stride != 2:
-                input_modules[3].stride = torch.nn.modules.utils._pair(self.pool0_stride)  # pylint: disable=protected-access
+                # pylint: disable=protected-access
+                input_modules[3].stride = torch.nn.modules.utils._pair(self.pool0_stride)
                 stride = int(stride * 2 / self.pool0_stride)
         else:
             input_modules.pop(3)
@@ -91,7 +92,8 @@ class Resnet(BaseNetwork):
 
         # input conv
         if self.input_conv_stride != 2:
-            input_modules[0].stride = torch.nn.modules.utils._pair(self.input_conv_stride)  # pylint: disable=protected-access
+            # pylint: disable=protected-access
+            input_modules[0].stride = torch.nn.modules.utils._pair(self.input_conv_stride)
             stride = int(stride * 2 / self.input_conv_stride)
 
         # optional use a conv in place of the max pool
@@ -249,7 +251,7 @@ class ShuffleNetV2K(BaseNetwork):
     kernel_width = 5
 
     def __init__(self, name, stages_repeats, stages_out_channels):
-        layer_norm = self.layer_norm
+        layer_norm = ShuffleNetV2K.layer_norm
         if layer_norm is None:
             layer_norm = torch.nn.BatchNorm2d
 
@@ -355,6 +357,7 @@ class ShuffleNetV2K(BaseNetwork):
         # layer norms
         if args.shufflenetv2k_instance_norm:
             cls.layer_norm = lambda x: torch.nn.InstanceNorm2d(
-                x, eps=1e-4, momentum=0.01, affine=True, track_running_stats=True)
+                x, momentum=0.01, affine=True, track_running_stats=True)
         if args.shufflenetv2k_group_norm:
-            cls.layer_norm = lambda x: torch.nn.GroupNorm(32 if x > 100 else 4, x, eps=1e-4)
+            cls.layer_norm = lambda x: torch.nn.GroupNorm(
+                (32 if x % 32 == 0 else 29) if x > 100 else 4, x)

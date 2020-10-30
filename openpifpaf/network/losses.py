@@ -36,11 +36,14 @@ class Bce(torch.nn.Module):
 
 
 class ScaleLoss(torch.nn.Module):
-    def __init__(self, b, *, low_clip=0.0, relative=False):
+    def __init__(self, b, *,
+                 clip=None,
+                 relative=False, relative_eps=0.1):
         super().__init__()
         self.b = b
-        self.low_clip = low_clip
+        self.clip = clip
         self.relative = relative
+        self.relative_eps = relative_eps
 
     def forward(self, logs, t):  # pylint: disable=arguments-differ
         loss = torch.nn.functional.l1_loss(
@@ -48,16 +51,17 @@ class ScaleLoss(torch.nn.Module):
             t,
             reduction='none',
         )
-        loss = torch.clamp(loss, self.low_clip, 5.0)
+        if self.clip is not None:
+            loss = torch.clamp(loss, self.clip[0], self.clip[1])
 
         loss = loss / self.b
         if self.relative:
-            loss = loss / (1.0 + t)
+            loss = loss / (self.relative_eps + t)
 
         return loss
 
 
-def laplace_loss(x1, x2, logb, t1, t2, bmin, *, weight=None, norm_low_clip=0.0):
+def laplace_loss(x1, x2, logb, t1, t2, bmin, *, weight=None, norm_clip=None):
     """Loss based on Laplace Distribution.
 
     Loss for a single two-dimensional vector (x1, x2) with radial
@@ -67,8 +71,18 @@ def laplace_loss(x1, x2, logb, t1, t2, bmin, *, weight=None, norm_low_clip=0.0):
     # left derivative of sqrt at zero is not defined, so prefer torch.norm():
     # https://github.com/pytorch/pytorch/issues/2421
     # norm = torch.sqrt((x1 - t1)**2 + (x2 - t2)**2)
-    norm = (torch.stack((x1, x2)) - torch.stack((t1, t2))).norm(dim=0)
-    #norm = torch.clamp(norm, norm_low_clip, 5.0)
+    # norm = (torch.stack((x1, x2)) - torch.stack((t1, t2))).norm(dim=0)
+    # norm = (
+    #     torch.nn.functional.l1_loss(x1, t1, reduction='none')
+    #     + torch.nn.functional.l1_loss(x2, t2, reduction='none')
+    # )
+    # While torch.norm is a special treatment at zero, it does produce
+    # large gradients for tiny values (as it should).
+    # Similar to BatchNorm, we introduce a physically irrelevant epsilon
+    # that stabilizes the gradients for small norms.
+    norm = torch.sqrt((x1 - t1)**2 + (x2 - t2)**2 + 0.0001)
+    if norm_clip is not None:
+        norm = torch.clamp(norm, norm_clip[0], norm_clip[1])
 
     # constrain range of logb
     # low range constraint: prevent strong confidence when overfitting
@@ -265,6 +279,7 @@ class MultiHeadLossAutoTuneKendall(torch.nn.Module):
         assert len(self.lambdas) == len(flat_head_losses)
         assert len(self.log_sigmas) == len(flat_head_losses)
         constrained_log_sigmas = 3.0 * torch.tanh(self.log_sigmas / 3.0)
+
         def tuned_loss(tune, log_sigma, loss):
             if tune == 'none':
                 return loss
@@ -277,6 +292,7 @@ class MultiHeadLossAutoTuneKendall(torch.nn.Module):
                 # ln(sqrt(2pi)) = 0.919
                 return 0.919 + log_sigma + loss * 0.5 * torch.exp(-2.0 * log_sigma)
             raise Exception('unknown tune: {}'.format(tune))
+
         loss_values = [
             lam * tuned_loss(t, log_sigma, l)
             for lam, t, log_sigma, l in zip(
@@ -396,15 +412,17 @@ class CompositeLoss(torch.nn.Module):
 
         self.confidence_loss = Bce(focal_gamma=self.focal_gamma, detach_focal=True)
         self.regression_loss = regression_loss or laplace_loss
-        b_scale_fm = self.b_scale / head_net.meta.stride
-        self.scale_losses = torch.nn.ModuleList([ScaleLoss(b_scale_fm, low_clip=0.0)
-                                                 for _ in range(self.n_scales)])
+        # b_scale_fm = self.b_scale / head_net.meta.stride
+        self.scale_losses = torch.nn.ModuleList([
+            ScaleLoss(self.b_scale, relative=True)
+            for _ in range(self.n_scales)
+        ])
         self.field_names = (
-            ['{}.{}.c'.format(head_net.meta.dataset, head_net.meta.name)] +
-            ['{}.{}.vec{}'.format(head_net.meta.dataset, head_net.meta.name, i + 1)
-             for i in range(self.n_vectors)] +
-            ['{}.{}.scales{}'.format(head_net.meta.dataset, head_net.meta.name, i + 1)
-             for i in range(self.n_scales)]
+            ['{}.{}.c'.format(head_net.meta.dataset, head_net.meta.name)]
+            + ['{}.{}.vec{}'.format(head_net.meta.dataset, head_net.meta.name, i + 1)
+               for i in range(self.n_vectors)]
+            + ['{}.{}.scales{}'.format(head_net.meta.dataset, head_net.meta.name, i + 1)
+               for i in range(self.n_scales)]
         )
 
         self.bce_blackout = None
@@ -454,13 +472,12 @@ class CompositeLoss(torch.nn.Module):
                 continue
 
             loss = self.regression_loss(
-                torch.masked_select(x_regs[:, :, i*2 + 0], reg_masks),
-                torch.masked_select(x_regs[:, :, i*2 + 1], reg_masks),
-                torch.masked_select(x_regs[:, :, self.n_vectors*2 + i], reg_masks),
-                torch.masked_select(t_regs[:, :, i*2 + 0], reg_masks),
-                torch.masked_select(t_regs[:, :, i*2 + 1], reg_masks),
-                torch.masked_select(t_regs[:, :, self.n_vectors*2 + i], reg_masks),
-                norm_low_clip=0.0,
+                torch.masked_select(x_regs[:, :, i * 2 + 0], reg_masks),
+                torch.masked_select(x_regs[:, :, i * 2 + 1], reg_masks),
+                torch.masked_select(x_regs[:, :, self.n_vectors * 2 + i], reg_masks),
+                torch.masked_select(t_regs[:, :, i * 2 + 0], reg_masks),
+                torch.masked_select(t_regs[:, :, i * 2 + 1], reg_masks),
+                torch.masked_select(t_regs[:, :, self.n_vectors * 2 + i], reg_masks),
             )
             if weight is not None:
                 loss = loss * weight[:, :, 0][reg_masks]
@@ -494,12 +511,12 @@ class CompositeLoss(torch.nn.Module):
         assert x.shape[2] == 1 + self.n_vectors * 3 + self.n_scales
         assert t.shape[2] == 1 + self.n_vectors * 3 + self.n_scales
 
-        x = x.double()
+        # x = x.double()
         x_confidence = x[:, :, 0:1]
         x_regs = x[:, :, 1:1 + self.n_vectors * 3]
         x_scales = x[:, :, 1 + self.n_vectors * 3:]
 
-        t = t.double()
+        # t = t.double()
         t_confidence = t[:, :, 0:1]
         t_regs = t[:, :, 1:1 + self.n_vectors * 3]
         t_scales = t[:, :, 1 + self.n_vectors * 3:]

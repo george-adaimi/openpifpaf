@@ -1,4 +1,3 @@
-from collections import defaultdict
 import logging
 
 import numpy as np
@@ -13,34 +12,6 @@ except ImportError:
 
 
 LOG = logging.getLogger(__name__)
-
-
-class AnnotationPainter:
-    def __init__(self, *,
-                 xy_scale=1.0,
-                 painters=None):
-        self.painters = {}
-        for painter_key, painter in PAINTERS.items():
-            if painters:
-                self.painters[painter_key] = painters.get(painter_key, None) or\
-                                                painter(xy_scale=xy_scale)
-            else:
-                self.painters[painter_key] = painter(xy_scale=xy_scale)
-
-    def annotations(self, ax, annotations, *,
-                    color=None, colors=None, texts=None, subtexts=None):
-        by_classname = defaultdict(list)
-        for ann_i, ann in enumerate(annotations):
-            by_classname[ann.__class__.__name__].append((ann_i, ann))
-
-        for classname, i_anns in by_classname.items():
-            anns = [ann for _, ann in i_anns]
-            this_colors = [colors[i] for i, _ in i_anns] if colors else None
-            this_texts = [texts[i] for i, _ in i_anns] if texts else None
-            this_subtexts = [subtexts[i] for i, _ in i_anns] if subtexts else None
-            self.painters[classname].annotations(
-                ax, anns,
-                color=color, colors=this_colors, texts=this_texts, subtexts=this_subtexts)
 
 
 class DetectionPainter:
@@ -476,12 +447,6 @@ class KeypointPainter:
     def _draw_decoding_order(ax, decoding_order):
         for step_i, (jsi, jti, jsxyv, jtxyv) in enumerate(decoding_order):
             ax.plot([jsxyv[0], jtxyv[0]], [jsxyv[1], jtxyv[1]], '--', color='black')
-            ax.text(0.5 * (jsxyv[0] + jtxyv[0]), 0.5 * (jsxyv[1] +jtxyv[1]),
+            ax.text(0.5 * (jsxyv[0] + jtxyv[0]), 0.5 * (jsxyv[1] + jtxyv[1]),
                     '{}: {} -> {}'.format(step_i, jsi, jti), fontsize=8,
                     color='white', bbox={'facecolor': 'black', 'alpha': 0.5, 'linewidth': 0})
-
-PAINTERS = {
-    'Annotation': KeypointPainter,
-    'AnnotationCrowd': CrowdPainter,
-    'AnnotationDet': DetectionPainter,
-}

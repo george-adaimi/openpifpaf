@@ -20,3 +20,4 @@ from .network.factory import BASE_FACTORIES, BASE_TYPES, HEAD_FACTORIES, HEAD_TY
 from .network.nets import MODEL_MIGRATION
 from .show.painters import PAINTERS
 from .transforms.preprocess import PREPROCESS_INVERSE
+from .show.annotation_painter import PAINTERS
