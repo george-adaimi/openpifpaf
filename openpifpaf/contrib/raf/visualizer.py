@@ -50,13 +50,11 @@ class Raf(Base):
     def _confidences(self, confidences):
         if not self.show_confidences:
             return
-        indices = np.arange(confidences.shape[0])[np.nanmax(confidences, axis=(1,2))>0.1]
+        indices = np.arange(confidences.shape[0])[np.nanmax(confidences, axis=(1,2))>0.2]
 
         for f in indices:
-            #LOG.debug('%s,%s',
-            #          self.keypoints[self.skeleton[f][0] - 1],
-            #          self.keypoints[self.skeleton[f][1] - 1])
-            #fig_file = os.path.join(self.fig_file, "prediction_image.raf_c_"+str(f)+".jpg") if self.fig_file else None
+            LOG.debug('%s', self.meta.rel_categories[f])
+
             with self.image_canvas(self._processed_image) as ax:
                 ax.text(0, 0, '{}'.format(self.meta.rel_categories[f]), fontsize=8, color='red')
                 im = ax.imshow(self.scale_scalar(confidences[f], self.meta.stride),
@@ -68,14 +66,11 @@ class Raf(Base):
                      annotations=None, confidence_fields=None, uv_is_offset=True):
         if not self.show_regressions:
             return
-        indices = np.arange(confidence_fields.shape[0])[np.nanmax(confidence_fields, axis=(1,2))>0.1]
+        indices = np.arange(confidence_fields.shape[0])[np.nanmax(confidence_fields, axis=(1,2))>0.2]
         for f in indices:
-            #LOG.debug('%s,%s',
-            #          self.keypoints[self.skeleton[f][0] - 1],
-            #          self.keypoints[self.skeleton[f][1] - 1])
+            LOG.debug('%s', self.meta.rel_categories[f])
 
             confidence_field = confidence_fields[f] if confidence_fields is not None else None
-            #fig_file = os.path.join(self.fig_file, "prediction_image.raf_reg_"+str(f)+".jpg") if self.fig_file else None
             with self.image_canvas(self._processed_image) as ax:
                 show.white_screen(ax, alpha=0.5)
                 ax.text(0, 0, '{}'.format(self.meta.rel_categories[f]), fontsize=14, color='red')
