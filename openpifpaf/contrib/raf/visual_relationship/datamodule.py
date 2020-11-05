@@ -28,6 +28,8 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
     augmentation = True
     rescale_images = 1.0
     upsample_stride = 1
+    special_preprocess = False
+    max_long_edge = False
 
     eval_long_edge = None
     eval_orientation_invariant = 0.0
@@ -82,6 +84,14 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
         group.add_argument('--visual-relationship-upsample',
                            default=cls.upsample_stride, type=int,
                            help='head upsample stride')
+        group.add_argument('--visual-relationship-special-preprocess',
+                           dest='visual_relationship_special_preprocess',
+                           default=False, action='store_true',
+                           help='do not apply data augmentation')
+        group.add_argument('--visual-relationship-max-long-edge',
+                           dest='visual_relationship_max_long_edge',
+                           default=False, action='store_true',
+                           help='do not apply data augmentation')
 
     @classmethod
     def configure(cls, args: argparse.Namespace):
@@ -102,6 +112,8 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
         cls.augmentation = args.visual_relationship_augmentation
         cls.rescale_images = args.visual_relationship_rescale_images
         cls.upsample_stride = args.visual_relationship_upsample
+        cls.special_preprocess = args.visual_relationship_special_preprocess
+        cls.max_long_edge = args.visual_relationship_max_long_edge
 
     @staticmethod
     def _convert_data(parent_data, meta):
@@ -143,6 +155,38 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
             orientation_t = openpifpaf.transforms.RandomApply(
                 openpifpaf.transforms.RotateBy90(), self.orientation_invariant)
 
+        if self.special_preprocess:
+            return openpifpaf.transforms.Compose([
+                openpifpaf.transforms.NormalizeAnnotations(),
+                openpifpaf.transforms.RandomApply(openpifpaf.transforms.HFlip(BBOX_KEYPOINTS, BBOX_HFLIP), 0.5),
+                #rescale_t,
+                openpifpaf.transforms.RescaleRelative(scale_range=(0.8 * self.rescale_images,
+                             1.3* self.rescale_images), absolute_reference=self.square_edge),
+                openpifpaf.transforms.Crop(self.square_edge, use_area_of_interest=True),
+                openpifpaf.transforms.CenterPad(self.square_edge),
+                orientation_t,
+                #openpifpaf.transforms.MinSize(min_side=4.0),
+                openpifpaf.transforms.UnclippedArea(threshold=0.8),
+                # transforms.UnclippedSides(),
+                openpifpaf.transforms.TRAIN_TRANSFORM,
+                openpifpaf.transforms.Encoders(encoders),
+            ])
+
+        if self.max_long_edge:
+            return openpifpaf.transforms.Compose([
+                openpifpaf.transforms.NormalizeAnnotations(),
+                openpifpaf.transforms.RandomApply(openpifpaf.transforms.HFlip(BBOX_KEYPOINTS, BBOX_HFLIP), 1),
+                #rescale_t,
+                openpifpaf.transforms.RescaleRelative(scale_range=(0.7 * self.rescale_images,
+                             1* self.rescale_images), absolute_reference=self.square_edge),
+                openpifpaf.transforms.CenterPad(self.square_edge),
+                orientation_t,
+                #openpifpaf.transforms.MinSize(min_side=4.0),
+                # transforms.UnclippedSides(),
+                openpifpaf.transforms.TRAIN_TRANSFORM,
+                openpifpaf.transforms.Encoders(encoders),
+            ])
+
         return openpifpaf.transforms.Compose([
             openpifpaf.transforms.NormalizeAnnotations(),
             openpifpaf.transforms.AnnotationJitter(),
@@ -151,8 +195,8 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
             openpifpaf.transforms.Crop(self.square_edge, use_area_of_interest=True),
             openpifpaf.transforms.CenterPad(self.square_edge),
             orientation_t,
-            openpifpaf.transforms.MinSize(min_side=4.0),
-            openpifpaf.transforms.UnclippedArea(threshold=0.75),
+            #openpifpaf.transforms.MinSize(min_side=4.0),
+            #openpifpaf.transforms.UnclippedArea(threshold=0.75),
             # transforms.UnclippedSides(),
             openpifpaf.transforms.TRAIN_TRANSFORM,
             openpifpaf.transforms.Encoders(encoders),
