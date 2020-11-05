@@ -26,13 +26,23 @@ class RelationPainter:
             this_color_sub = ann.category_id_sub - 1
             this_color_rel = ann.category_id_rel - 1
             if colors is not None:
-                this_color_obj = colors[i]
-                this_color_sub = colors[i]
-                this_color_rel = colors[i]
+                if len(colors[i])==3:
+                    this_color_obj = colors[i][2]
+                    this_color_sub = colors[i][0]
+                    this_color_rel = colors[i][1]
+                else:
+                    this_color_obj = colors[i]
+                    this_color_sub = colors[i]
+                    this_color_rel = colors[i]
             elif color is not None:
-                this_color_obj = color
-                this_color_sub = color
-                this_color_rel = color
+                if len(color)==3:
+                    this_color_obj = color[2]
+                    this_color_sub = color[0]
+                    this_color_rel = color[1]
+                else:
+                    this_color_obj = color
+                    this_color_sub = color
+                    this_color_rel = color
 
             text_sub = ann.category_sub
             text_obj = ann.category_obj
@@ -67,12 +77,18 @@ class RelationPainter:
         if isinstance(color[0], (int, np.integer)):
             color_sub = matplotlib.cm.get_cmap('tab20')((color[0] % 20 + 0.05) / 20)
             color_sub = colorsys.rgb_to_hsv(color_sub[0], color_sub[1], color_sub[2])
+        else:
+            color_sub = matplotlib.colors.to_rgba(color[0])
         if isinstance(color[1], (int, np.integer)):
             color_rel = matplotlib.cm.get_cmap('tab20')((color[1] % 20 + 0.05) / 20)
             color_rel = colorsys.rgb_to_hsv(color_rel[0], color_rel[1], color_rel[2])
+        else:
+            color_rel = matplotlib.colors.to_rgba(color[1])
         if isinstance(color[2], (int, np.integer)):
             color_obj = matplotlib.cm.get_cmap('tab20')((color[2] % 20 + 0.05) / 20)
             color_obj = colorsys.rgb_to_hsv(color_obj[0], color_obj[1], color_obj[2])
+        else:
+            color_obj = matplotlib.colors.to_rgba(color[2])
 
 
         if ann.category_id_sub in self.dict_nodes and tuple(ann.bbox_sub) in self.dict_nodes[ann.category_id_sub].keys():
@@ -101,10 +117,16 @@ class RelationPainter:
 
         if isinstance(color[0], (int, np.integer)):
             color_sub = matplotlib.cm.get_cmap('tab20')((color[0] % 20 + 0.05) / 20)
+        else:
+            color_sub = color[0]
         if isinstance(color[1], (int, np.integer)):
             color_rel = matplotlib.cm.get_cmap('tab20')((color[1] % 20 + 0.05) / 20)
+        else:
+            color_rel = color[1]
         if isinstance(color[2], (int, np.integer)):
             color_obj = matplotlib.cm.get_cmap('tab20')((color[2] % 20 + 0.05) / 20)
+        else:
+            color_obj = color[2]
 
         # SUBJECT
         x, y, w, h = ann.bbox_sub * self.xy_scale

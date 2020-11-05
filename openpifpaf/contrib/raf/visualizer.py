@@ -6,6 +6,7 @@ from openpifpaf.visualizer import Base
 from openpifpaf.annotation import AnnotationDet
 from openpifpaf import show
 from . import headmeta
+from .painters import RelationPainter
 
 LOG = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class Raf(Base):
     def __init__(self, meta: headmeta.Raf):
         super().__init__(meta.name)
         self.meta = meta
-        self.detection_painter = show.DetectionPainter(xy_scale=meta.stride)
+        self.detection_painter = RelationPainter(xy_scale=meta.stride)
 
     def targets(self, field, *, annotation_dicts):
         #assert self.keypoints is not None
@@ -75,7 +76,7 @@ class Raf(Base):
                 show.white_screen(ax, alpha=0.5)
                 ax.text(0, 0, '{}'.format(self.meta.rel_categories[f]), fontsize=14, color='red')
                 if annotations:
-                    self.detection_painter.annotations(ax, annotations, color='lightgray')
+                    self.detection_painter.annotations(ax, annotations, color=('lightgray', 'mediumblue', 'firebrick'))
                 q1 = show.quiver(ax,
                                  regression_fields1[f, :2],
                                  confidence_field=confidence_field,

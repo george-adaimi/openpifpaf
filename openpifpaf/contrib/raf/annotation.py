@@ -35,7 +35,8 @@ class AnnotationRaf(Base):
         self.bbox_obj = None
         self.bbox_sub = None
 
-    def set(self, category_id_obj, category_id_sub, category_id_rel, score_sub, score_rel, score_obj, bbox_sub, bbox_obj):
+    def set(self, category_id_obj, category_id_sub, category_id_rel, score_sub,
+            score_rel, score_obj, bbox_sub, bbox_obj):
         """Set score to None for a ground truth annotation."""
         self.category_id_obj = category_id_obj
         self.category_id_sub = category_id_sub
@@ -66,10 +67,9 @@ class AnnotationRaf(Base):
             'category_sub': self.category_sub,
             'category_obj': self.category_obj,
             'category_rel': self.category_rel,
-            'score_sub': max(0.001, round(float(self.score_sub), 3)),
-            'score_obj': max(0.001, round(float(self.score_obj), 3)),
-            'score_rel': max(0.001, round(float(self.score_rel), 3)),
+            'score_sub': max(0.001, round(float(self.score_sub), 3)) if not self.score_sub else self.score_sub,
+            'score_obj': max(0.001, round(float(self.score_obj), 3)) if not self.score_obj else self.score_obj,
+            'score_rel': max(0.001, round(float(self.score_rel), 3)) if not self.score_rel else self.score_rel,
             'bbox_sub': [round(float(c), 2) for c in self.bbox_sub],
             'bbox_obj': [round(float(c), 2) for c in self.bbox_obj],
-            'bbox_rel': [round(float(c), 2) for c in self.bbox_rel],
         }
