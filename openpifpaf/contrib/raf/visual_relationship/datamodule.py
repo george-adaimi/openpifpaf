@@ -7,9 +7,10 @@ import openpifpaf
 
 from .visual_relationship import VisualRelationship
 from .constants import BBOX_KEYPOINTS, BBOX_HFLIP, OBJ_CATEGORIES, REL_CATEGORIES
-#from . import metric
+from . import metric
 from .. import headmeta
 from ..raf import Raf
+from .toannotations import ToRafAnnotations
 
 class VisualRelationshipModule(openpifpaf.datasets.DataModule):
     train_image_dir = "data/visual_relationship/sg_dataset/sg_train_images"
@@ -260,8 +261,8 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
             padding_t,
             orientation_t,
             openpifpaf.transforms.ToAnnotations([
-                openpifpaf.transforms.ToDetAnnotations(self.categories),
-                openpifpaf.transforms.ToCrowdAnnotations(self.categories),
+                ToRafAnnotations(self.obj_categories, self.rel_categories),
+                openpifpaf.transforms.ToCrowdAnnotations(self.obj_categories),
             ]),
             openpifpaf.transforms.EVAL_TRANSFORM,
         ])
@@ -280,8 +281,5 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=False,
             collate_fn=openpifpaf.datasets.collate_images_anns_meta)
 
-    # def metrics(self):
-    #     return [metric.VisualRelationship(
-    #         self.eval_annotations,
-    #         self.eval_image_dir,
-    #     )]
+    def metrics(self):
+        return [metric.VRD()]
