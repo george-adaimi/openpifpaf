@@ -105,7 +105,8 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
         cls.val_annotations = args.visual_relationship_val_annotations
         cls.train_image_dir = args.visual_relationship_train_image_dir
         cls.val_image_dir = args.visual_relationship_val_image_dir
-
+        cls.eval_image_dir = cls.val_image_dir
+        cls.eval_annotations = cls.val_annotations
         cls.n_images = args.visual_relationship_n_images
         cls.square_edge = args.visual_relationship_square_edge
         cls.extended_scale = args.visual_relationship_extended_scale

@@ -67,9 +67,9 @@ class AnnotationRaf(Base):
             'category_sub': self.category_sub,
             'category_obj': self.category_obj,
             'category_rel': self.category_rel,
-            'score_sub': max(0.001, round(float(self.score_sub), 3)) if not self.score_sub else self.score_sub,
-            'score_obj': max(0.001, round(float(self.score_obj), 3)) if not self.score_obj else self.score_obj,
-            'score_rel': max(0.001, round(float(self.score_rel), 3)) if not self.score_rel else self.score_rel,
+            'score_sub': max(0.001, round(float(self.score_sub), 3)) if not self.score_sub is None else self.score_sub,
+            'score_obj': max(0.001, round(float(self.score_obj), 3)) if not self.score_obj is None else self.score_obj,
+            'score_rel': max(0.001, round(float(self.score_rel), 3)) if not self.score_rel is None else self.score_rel,
             'bbox_sub': [round(float(c), 2) for c in self.bbox_sub],
             'bbox_obj': [round(float(c), 2) for c in self.bbox_obj],
         }

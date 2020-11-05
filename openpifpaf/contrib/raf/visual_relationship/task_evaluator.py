@@ -26,29 +26,29 @@ def bbox_overlaps(boxes, query_boxes):
     N = boxes.shape[0]
     K = query_boxes.shape[0]
     overlaps = np.zeros((N, K), dtype=np.float32)
-    with nogil:
-        for k in range(K):
-            box_area = (
-                (query_boxes[k, 2] - query_boxes[k, 0] + 1) *
-                (query_boxes[k, 3] - query_boxes[k, 1] + 1)
+
+    for k in range(K):
+        box_area = (
+            (query_boxes[k, 2] - query_boxes[k, 0] + 1) *
+            (query_boxes[k, 3] - query_boxes[k, 1] + 1)
+        )
+        for n in range(N):
+            iw = (
+                min(boxes[n, 2], query_boxes[k, 2]) -
+                max(boxes[n, 0], query_boxes[k, 0]) + 1
             )
-            for n in range(N):
-                iw = (
-                    min(boxes[n, 2], query_boxes[k, 2]) -
-                    max(boxes[n, 0], query_boxes[k, 0]) + 1
+            if iw > 0:
+                ih = (
+                    min(boxes[n, 3], query_boxes[k, 3]) -
+                    max(boxes[n, 1], query_boxes[k, 1]) + 1
                 )
-                if iw > 0:
-                    ih = (
-                        min(boxes[n, 3], query_boxes[k, 3]) -
-                        max(boxes[n, 1], query_boxes[k, 1]) + 1
+                if ih > 0:
+                    ua = float(
+                        (boxes[n, 2] - boxes[n, 0] + 1) *
+                        (boxes[n, 3] - boxes[n, 1] + 1) +
+                        box_area - iw * ih
                     )
-                    if ih > 0:
-                        ua = float(
-                            (boxes[n, 2] - boxes[n, 0] + 1) *
-                            (boxes[n, 3] - boxes[n, 1] + 1) +
-                            box_area - iw * ih
-                        )
-                        overlaps[n, k] = iw * ih / ua
+                    overlaps[n, k] = iw * ih / ua
     return overlaps
 
 def boxes_union(boxes1, boxes2):
@@ -61,7 +61,7 @@ def boxes_union(boxes1, boxes2):
 
 def eval_rel_results(all_results):
 
-    prd_k_set = (1)
+    prd_k_set = [1]
 
     eval_sets = (False, True)
 
@@ -80,7 +80,7 @@ def eval_rel_results(all_results):
             for im_i, res in enumerate(tqdm(all_results)):
 
                 # in oi_all_rel some images have no dets
-                if len(res['rela_scores']) == 0:
+                if len(res['prd_scores']) == 0:
                     det_boxes_s_top = np.zeros((0, 4), dtype=np.float32)
                     det_boxes_o_top = np.zeros((0, 4), dtype=np.float32)
                     det_labels_s_top = np.zeros(0, dtype=np.int32)
@@ -96,7 +96,7 @@ def eval_rel_results(all_results):
                     det_scores_obj = res['obj_scores']  # (#num_rel,)
                     det_scores_prd = res['prd_scores'].reshape(res['prd_scores'].shape[0],-1)
 
-                    det_labels_prd = res['rela_labels'].reshape(res['rela_labels'].shape[0],-1)
+                    det_labels_prd = res['prd_labels'].reshape(res['prd_labels'].shape[0],-1)
 
                     det_scores_so = det_scores_sbj * det_scores_obj
                     det_scores_spo = det_scores_so[:, None] * det_scores_prd[:, :prd_k]

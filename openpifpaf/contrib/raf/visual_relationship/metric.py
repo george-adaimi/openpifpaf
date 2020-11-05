@@ -4,10 +4,8 @@ import numpy as np
 import zipfile
 from tqdm import tqdm
 from PIL import Image
-import copy
 
 from openpifpaf.metric.base import Base
-from visdroneval.utils import calcAccuracy, dropObjectsInIgr
 from . import task_evaluator
 
 LOG = logging.getLogger(__name__)
@@ -59,18 +57,24 @@ class VRD(Base):
             y1, y2 = np.clip([y, y+h], a_min=0, a_max=height)
             obj_bbox.append([x1, y1, x2, y2])
 
-        image_annotations['gt_sbj_boxes'] = copy.deepcopy(sub_bbox)
-        image_annotations['gt_obj_boxes'] = copy.deepcopy(obj_bbox)
-        image_annotations['gt_sbj_labels'] = copy.deepcopy(sub)
-        image_annotations['gt_obj_labels'] = copy.deepcopy(obj)
-        image_annotations['gt_prd_labels'] = copy.deepcopy(rela)
+        if len(ground_truth) == 0:
+            obj = np.zeros(0, dtype=np.int32)
+            rela = np.zeros(0, dtype=np.int32)
+            sub = np.zeros(0, dtype=np.int32)
+            sub_bbox = np.zeros((0, 4), dtype=np.float32)
+            obj_bbox = np.zeros((0, 4), dtype=np.float32)
+        image_annotations['gt_sbj_boxes'] = np.asarray(sub_bbox)
+        image_annotations['gt_obj_boxes'] = np.asarray(obj_bbox)
+        image_annotations['gt_sbj_labels'] = np.asarray(sub)
+        image_annotations['gt_obj_labels'] = np.asarray(obj)
+        image_annotations['gt_prd_labels'] = np.asarray(rela)
 
         obj = []
         rela = []
         sub = []
-        obj_scores = []
-        rela_scores = []
-        sub_scores = []
+        obj_scores = [] #np.ones(len(ground_truth), dtype=np.int32)
+        rela_scores = [] #np.ones(len(ground_truth), dtype=np.int32)
+        sub_scores = [] #np.ones(len(ground_truth), dtype=np.int32)
         sub_bbox = []
         obj_bbox = []
 
@@ -91,14 +95,14 @@ class VRD(Base):
             rela_scores.append(pred_data['score_rel'])
             obj_scores.append(pred_data['score_obj'])
 
-        image_annotations['sbj_boxes'] = copy.deepcopy(sub_bbox)
-        image_annotations['obj_boxes'] = copy.deepcopy(obj_bbox)
-        image_annotations['sbj_labels'] = copy.deepcopy(sub)
-        image_annotations['obj_labels'] = copy.deepcopy(obj)
-        image_annotations['rela_labels'] = copy.deepcopy(rela)
-        image_annotations['sbj_scores'] = copy.deepcopy(sub_scores)
-        image_annotations['obj_scores'] = copy.deepcopy(obj_scores)
-        image_annotations['rela_scores'] = copy.deepcopy(rela_scores)
+        image_annotations['sbj_boxes'] = np.asarray(sub_bbox)
+        image_annotations['obj_boxes'] = np.asarray(obj_bbox)
+        image_annotations['sbj_labels'] = np.asarray(sub)
+        image_annotations['obj_labels'] = np.asarray(obj)
+        image_annotations['prd_labels'] = np.asarray(rela)
+        image_annotations['sbj_scores'] = np.asarray(sub_scores)
+        image_annotations['obj_scores'] = np.asarray(obj_scores)
+        image_annotations['prd_scores'] = np.asarray(rela_scores)
         self.roidb_pred.append(image_annotations)
 
 
