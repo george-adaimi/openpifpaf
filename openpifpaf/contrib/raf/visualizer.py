@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 from openpifpaf.visualizer import Base
-from openpifpaf.annotation import AnnotationDet
+from .annotation import AnnotationRaf
 from openpifpaf import show
 from . import headmeta
 from .painters import RelationPainter
@@ -24,13 +24,27 @@ class Raf(Base):
         self.detection_painter = RelationPainter(xy_scale=meta.stride)
 
     def targets(self, field, *, annotation_dicts):
-        #assert self.keypoints is not None
-        #assert self.skeleton is not None
+        annotations = []
+        dict_id2index = {}
+        for det_index, ann in enumerate(annotation_dicts):
+            dict_id2index[ann['detection_id']] = det_index
 
-        annotations = [
-            AnnotationDet(self.meta.obj_categories).set(ann['category_id'], None, ann['bbox'])
-            for ann in annotation_dicts
-        ]
+        for ann in annotation_dicts:
+            if ann['iscrowd'] or not np.any(ann['bbox']) or not len(ann['object_index']) > 0:
+                continue
+            bbox = ann['bbox']
+            category_id = ann['category_id']
+            for object_id, predicate in zip(ann['object_index'], ann['predicate']):
+                if not(object_id in dict_id2index) or annotation_dicts[dict_id2index[object_id]]['iscrowd']:
+                    continue
+                object_idx = dict_id2index[object_id]
+                bbox_object = annotation_dicts[object_idx]['bbox']
+                object_category = annotation_dicts[object_idx]['category_id']
+                annotations.append(AnnotationRaf(self.meta.obj_categories,
+                                    self.meta.rel_categories).set(
+                                    object_category, category_id,
+                                    predicate+1, None, None, None, bbox, bbox_object
+                                    ))
         self._confidences(field[:, 0])
         self._regressions(field[:, 1:3], field[:, 3:5], field[:, 5], field[:, 6], confidence_fields=field[:,0], annotations=annotations)
 
