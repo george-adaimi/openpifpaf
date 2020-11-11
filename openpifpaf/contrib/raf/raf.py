@@ -18,7 +18,7 @@ class Raf:
     meta: headmeta.Raf
     rescaler: AnnRescalerRel=None
     v_threshold: int = 0
-    bmin: float = 1.0  #: in pixels
+    bmin: float = 8.0  #: in pixels
     visualizer: RafVisualizer = None
 
     min_size: ClassVar[int] = 3
@@ -97,12 +97,14 @@ class RafGenerator:
 
     def fill(self, detections):
         for det_index, (k, ann) in enumerate(detections.items()):
-            if not len(ann['object_index']) > 0:
+            if not len(ann['object_index']) > 0 or ann['iscrowd']:
                 continue
             bbox = ann['bbox']
             det_id = ann['detection_id']
             category_id = ann['category_id']
             for object_id, predicate in zip(ann['object_index'], ann['predicate']):
+                if detections[object_id]['iscrowd']:
+                    continue
                 bbox_object = detections[object_id]['bbox']
                 object_category = detections[object_id]['category_id']
                 self.fill_keypoints(predicate, bbox, bbox_object, [other_ann['bbox'] for other_ann in detections.values() if (other_ann['detection_id'] != det_id and other_ann['category_id']==category_id)], [other_ann['bbox']  for other_ann in detections.values() if (other_ann['detection_id'] != object_id and other_ann['category_id']==object_category)])
