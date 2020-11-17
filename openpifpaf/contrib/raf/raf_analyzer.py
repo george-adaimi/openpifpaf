@@ -12,7 +12,7 @@ from . import headmeta
 LOG = logging.getLogger(__name__)
 
 class RafAnalyzer:
-    default_score_th = 0.2
+    default_score_th = 0.1
 
     def __init__(self, cifhr, *, score_th=None, cif_floor=0.1):
         self.cifhr = cifhr
@@ -21,6 +21,7 @@ class RafAnalyzer:
 
         #self.triplets = defaultdict([])
         self.triplets = np.empty((0,8))
+
     def scalar_values_3d_py(self, field, x, y, default_v=-1, scale=None):
         values_np = np.full((field.shape[0], x.shape[0],), default_v, dtype=np.float32)
 
@@ -55,12 +56,19 @@ class RafAnalyzer:
             cifhr_values = self.scalar_values_3d_py(self.cifhr, nine[1], nine[2], default_v=0.0, scale=nine[7] if nine.shape[0] == 9 else None)
             cifhr_s = np.max(cifhr_values, axis=0)
             index_s = np.argmax(cifhr_values, axis=0)
-            nine[0] = nine[0] * (self.cif_floor + (1.0 - self.cif_floor) * cifhr_s)
+            #raf_s = nine[0] * (self.cif_floor + (1.0 - self.cif_floor) * cifhr_s)
+            raf_s = (2/3)*nine[0] + (1/3)*cifhr_s
 
             cifhr_values = self.scalar_values_3d_py(self.cifhr, nine[3], nine[4], default_v=0.0, scale=nine[8] if nine.shape[0] == 9 else None)
             cifhr_o = np.max(cifhr_values, axis=0)
             index_o = np.argmax(cifhr_values, axis=0)
-            nine[0] = nine[0] * (self.cif_floor + (1.0 - self.cif_floor) * cifhr_o)
+            #nine[0] = 0.5*(raf_s + nine[0] * (self.cif_floor + (1.0 - self.cif_floor) * cifhr_o))
+            nine[0] = raf_s + (1/3)* cifhr_o
+
+            mask = nine[0] > self.score_th
+            index_s = index_s[mask]
+            index_o = index_o[mask]
+            nine = nine[:, mask]
             #self.triplets[index_s].append([nine[0], index_s, nine[1], nine[2], raf_i, index_o, nine[3], nine[4], False])
             self.triplets = np.concatenate((self.triplets, np.column_stack([nine[0], index_s, nine[1], nine[2], [raf_i]*nine[0].shape[0], index_o, nine[3], nine[4]])))
 

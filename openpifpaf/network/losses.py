@@ -2,6 +2,9 @@
 
 import logging
 import torch
+import numpy as np
+import itertools
+import time
 
 from . import heads
 
@@ -20,7 +23,8 @@ class Bce(torch.nn.Module):
         # x = torch.clamp(x, -20.0, 20.0)
         bce = torch.nn.functional.binary_cross_entropy_with_logits(
             x, t_zeroone, reduction='none')
-        bce = torch.clamp(bce, 0.02, 5.0)  # 0.02 -> -3.9, 0.01 -> -4.6, 0.001 -> -7, 0.0001 -> -9
+        #bce = torch.clamp(bce, 0.02, 5.0)  # 0.02 -> -3.9, 0.01 -> -4.6, 0.001 -> -7, 0.0001 -> -9
+        bce = torch.clamp_min(bce, 0.02)
 
         if self.focal_gamma != 0.0:
             pt = torch.exp(-bce)
@@ -47,7 +51,8 @@ class ScaleLoss(torch.nn.Module):
 
     def forward(self, logs, t):  # pylint: disable=arguments-differ
         loss = torch.nn.functional.l1_loss(
-            torch.exp(logs),
+            #torch.exp(logs),
+            torch.nn.functional.softplus(logs),
             t,
             reduction='none',
         )
@@ -61,9 +66,43 @@ class ScaleLoss(torch.nn.Module):
         return loss
 
 
-def laplace_loss(x1, x2, logb, t1, t2, bmin, *, weight=None, norm_clip=None):
-    """Loss based on Laplace Distribution.
+# def laplace_loss(x1, x2, logb, t1, t2, bmin, *, weight=None, norm_clip=None):
+#     """Loss based on Laplace Distribution.
+#
+#     Loss for a single two-dimensional vector (x1, x2) with radial
+#     spread b and true (t1, t2) vector.
+#     """
+#
+#     # left derivative of sqrt at zero is not defined, so prefer torch.norm():
+#     # https://github.com/pytorch/pytorch/issues/2421
+#     # norm = torch.sqrt((x1 - t1)**2 + (x2 - t2)**2)
+#     # norm = (torch.stack((x1, x2)) - torch.stack((t1, t2))).norm(dim=0)
+#     # norm = (
+#     #     torch.nn.functional.l1_loss(x1, t1, reduction='none')
+#     #     + torch.nn.functional.l1_loss(x2, t2, reduction='none')
+#     # )
+#     # While torch.norm is a special treatment at zero, it does produce
+#     # large gradients for tiny values (as it should).
+#     # Similar to BatchNorm, we introduce a physically irrelevant epsilon
+#     # that stabilizes the gradients for small norms.
+#     norm = torch.sqrt((x1 - t1)**2 + (x2 - t2)**2 + 0.0001)
+#     if norm_clip is not None:
+#         norm = torch.clamp(norm, norm_clip[0], norm_clip[1])
+#
+#     # constrain range of logb
+#     # low range constraint: prevent strong confidence when overfitting
+#     # high range constraint: force some data dependence
+#     # logb = 3.0 * torch.tanh(logb / 3.0)
+#     logb = torch.clamp_min(logb, -3.0)
+#
+#     # ln(2) = 0.694
+#     losses = logb + (norm + bmin) * torch.exp(-logb)
+#     if weight is not None:
+#         losses = losses * weight
+#     return losses
 
+def laplace_loss(x1, x2, b, t1, t2, bmin, *, weight=None, norm_clip=None):
+    """Loss based on Laplace Distribution.
     Loss for a single two-dimensional vector (x1, x2) with radial
     spread b and true (t1, t2) vector.
     """
@@ -80,7 +119,7 @@ def laplace_loss(x1, x2, logb, t1, t2, bmin, *, weight=None, norm_clip=None):
     # large gradients for tiny values (as it should).
     # Similar to BatchNorm, we introduce a physically irrelevant epsilon
     # that stabilizes the gradients for small norms.
-    norm = torch.sqrt((x1 - t1)**2 + (x2 - t2)**2 + 0.0001)
+    norm = torch.sqrt((x1 - t1)**2 + (x2 - t2)**2 + torch.clamp_min(bmin**2, 0.0001))
     if norm_clip is not None:
         norm = torch.clamp(norm, norm_clip[0], norm_clip[1])
 
@@ -88,10 +127,11 @@ def laplace_loss(x1, x2, logb, t1, t2, bmin, *, weight=None, norm_clip=None):
     # low range constraint: prevent strong confidence when overfitting
     # high range constraint: force some data dependence
     # logb = 3.0 * torch.tanh(logb / 3.0)
-    logb = torch.clamp_min(logb, -3.0)
+    b = torch.nn.functional.softplus(b)
+    b = torch.max(b, bmin)
 
     # ln(2) = 0.694
-    losses = logb + (norm + bmin) * torch.exp(-logb)
+    losses = torch.log(b) + norm / b
     if weight is not None:
         losses = losses * weight
     return losses
@@ -401,6 +441,8 @@ class CompositeLoss(torch.nn.Module):
     background_weight = 1.0
     focal_gamma = 1.0
     b_scale = 1.0  #: in pixels
+    negative_sampling = False
+    iter_btch_class = None
 
     def __init__(self, head_net: heads.CompositeField3, regression_loss):
         super().__init__()
@@ -436,6 +478,102 @@ class CompositeLoss(torch.nn.Module):
         bce_masks = torch.isnan(t_confidence).bitwise_not_()
         if not torch.any(bce_masks):
             return None
+
+        batch_size = x_confidence.shape[0]
+        LOG.debug('batch size = %d', batch_size)
+
+        if self.bce_blackout:
+            x_confidence = x_confidence[:, self.bce_blackout]
+            bce_masks = bce_masks[:, self.bce_blackout]
+            t_confidence = t_confidence[:, self.bce_blackout]
+
+        LOG.debug('BCE: x = %s, target = %s, mask = %s',
+                  x_confidence.shape, t_confidence.shape, bce_masks.shape)
+        bce_target = torch.masked_select(t_confidence, bce_masks)
+        x_confidence = torch.masked_select(x_confidence, bce_masks)
+        ce_loss = self.confidence_loss(x_confidence, bce_target)
+        if self.background_weight != 1.0:
+            bce_weight = torch.ones_like(bce_target, requires_grad=False)
+            bce_weight[bce_target == 0] *= self.background_weight
+            ce_loss = ce_loss * bce_weight
+
+        ce_loss = ce_loss.sum() / batch_size
+
+        return ce_loss
+
+    # def _get_dict_neg(self, neg_samples, pos_samples):
+    #     neg_dict = defaultdict()
+    #     prev_key = None
+    #     if len(neg_samples) > 0:
+    #         for index, sample in enumerate(neg_samples):
+    #             key = tuple(sample[:2])
+    #             if prev_key != key:
+    #                 neg_dict[key] = [index, None]
+    #                 if prev_key:
+    #                     neg_dict[prev_key][1] = index
+    #                 prev_key = key
+    #         neg_dict[prev_key][1] = len(neg_samples)
+    #     pos_dict = defaultdict()
+    #     prev_key = None
+    #     if len(pos_samples) > 0:
+    #         for index, sample in enumerate(pos_samples):
+    #             key = tuple(sample[:2])
+    #             if prev_key != key:
+    #                 pos_dict[key] = [index, None]
+    #                 if prev_key:
+    #                     pos_dict[prev_key][1] = index
+    #                 prev_key = key
+    #         pos_dict[prev_key][1] = len(neg_samples)
+    #     return neg_dict, pos_dict
+
+    def _get_dict_neg(self, neg_samples, pos_samples, shape):
+        neg_dict = {}
+        pos_dict = {}
+        for key in itertools.product(range(shape[0]), range(shape[1])):
+            itemindex = np.where((neg_samples[:, 0] ==key[0]) & (neg_samples[:, 1] ==key[1]))
+            if len(itemindex[0])>0:
+                neg_dict[key] = [itemindex[0][0], itemindex[0][-1]+1]
+            itemindex = np.where((pos_samples[:, 0] ==key[0]) & (pos_samples[:, 1] ==key[1]))
+            if len(itemindex[0])>0:
+                pos_dict[key] = [itemindex[0][0], itemindex[0][-1]+1]
+        return neg_dict, pos_dict
+
+    def _get_dict_neg_torch(self, neg_samples, pos_samples, shape):
+        neg_dict = {}
+        pos_dict = {}
+        if self.iter_btch_class is None:
+            self.iter_btch_class = list(itertools.product(range(shape[0]), range(shape[1])))
+        for key in self.iter_btch_class:
+            itemindex = torch.nonzero((neg_samples[:, 0] ==key[0]) & (neg_samples[:, 1] ==key[1]), as_tuple=False)
+            if len(itemindex)>0:
+                neg_dict[key] = [itemindex[0][0].item(), itemindex[0][-1].item()+1]
+            itemindex = torch.nonzero((pos_samples[:, 0] ==key[0]) & (pos_samples[:, 1] ==key[1]), as_tuple=False)
+            if len(itemindex)>0:
+                pos_dict[key] = [itemindex[0][0].item(), itemindex[0][-1].item()+1]
+        return neg_dict, pos_dict
+
+    def _confidence_loss_negSampling(self, x_confidence, t_confidence):
+        # TODO assumes one confidence
+        x_confidence = x_confidence[:, :, 0]
+        t_confidence = t_confidence[:, :, 0]
+
+        bce_masks = torch.isnan(t_confidence).bitwise_not_()
+        if not torch.any(bce_masks):
+            return None
+        neg_samples = torch.nonzero(t_confidence == 0, as_tuple=False)
+        pos_samples = torch.nonzero(t_confidence == 1, as_tuple=False)
+        neg_dict, pos_dict = self._get_dict_neg_torch(neg_samples, pos_samples, shape=bce_masks.shape[:2])
+        chosen_indx = []
+        for key in neg_dict.keys():
+            output_cells = bce_masks[key[0], key[1]].sum()
+            pos_cnt = 0
+            if key in pos_dict:
+                pos_cnt = (pos_dict[key][1]-pos_dict[key][0])/16
+            #samples_idx = torch.randperm(neg_samples[(neg_samples[:,0] == btch_indx) & (neg_samples[:,1] == class_indx)].shape[0])[:(output_cells-int(100-pos_cnt)*16)]
+            samples_idx = torch.randperm(neg_dict[key][1]-neg_dict[key][0])[:(output_cells-int(100-pos_cnt)*16)]
+            chosen_indx.append(neg_samples[neg_dict[key][0]:neg_dict[key][1]][samples_idx])
+        chosen_neg = torch.cat(chosen_indx, 0)
+        bce_masks[chosen_neg[:, 0], chosen_neg[:, 1], chosen_neg[:, 2], chosen_neg[:,3]] = False
 
         batch_size = x_confidence.shape[0]
         LOG.debug('batch size = %d', batch_size)
@@ -521,7 +659,10 @@ class CompositeLoss(torch.nn.Module):
         t_regs = t[:, :, 1:1 + self.n_vectors * 3]
         t_scales = t[:, :, 1 + self.n_vectors * 3:]
 
-        ce_loss = self._confidence_loss(x_confidence, t_confidence)
+        if self.negative_sampling:
+            ce_loss = self._confidence_loss_negSampling(x_confidence, t_confidence)
+        else:
+            ce_loss = self._confidence_loss(x_confidence, t_confidence)
         reg_losses = self._localization_loss(x_regs, t_regs)
         scale_losses = self._scale_losses(x_scales, t_scales)
 
@@ -555,6 +696,8 @@ def cli(parser):
     group.add_argument('--auto-tune-mtl-variance', default=False, action='store_true',
                        help=('[experimental] use Variance prescription for '
                              'adjusting the multitask weight'))
+    group.add_argument('--use-negative-sampling', default=False, action='store_true',
+                       help=('Sample a few negative samples'))
     assert MultiHeadLoss.task_sparsity_weight == MultiHeadLossAutoTuneKendall.task_sparsity_weight
     assert MultiHeadLoss.task_sparsity_weight == MultiHeadLossAutoTuneVariance.task_sparsity_weight
     group.add_argument('--task-sparsity-weight',
@@ -567,6 +710,7 @@ def configure(args):
     CompositeLoss.background_weight = args.background_weight
     CompositeLoss.focal_gamma = args.focal_gamma
     CompositeLoss.b_scale = args.b_scale
+    CompositeLoss.negative_sampling = args.use_negative_sampling
 
     # MultiHeadLoss
     MultiHeadLoss.task_sparsity_weight = args.task_sparsity_weight

@@ -187,7 +187,8 @@ def main():
     # processor.instance_scorer.write_data('instance_score_data.json')
 
     # model stats
-    counted_ops = list(count_ops(model_cpu))
+    #counted_ops = list(count_ops(model_cpu))
+    counted_ops = [0]
     local_checkpoint = network.local_checkpoint_path(args.checkpoint)
     file_size = os.path.getsize(local_checkpoint) if local_checkpoint else -1.0
 

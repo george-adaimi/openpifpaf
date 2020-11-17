@@ -51,6 +51,11 @@ class AnnotationRaf(Base):
     @property
     def category_sub(self):
         return self.obj_categories[self.category_id_sub - 1]
+
+    @property
+    def score(self):
+        return self.score_sub*self.score_obj*self.score_rel
+
     @property
     def category_obj(self):
         return self.obj_categories[self.category_id_obj - 1]

@@ -5,19 +5,18 @@ import torchvision
 
 import openpifpaf
 
-from .visual_relationship import VisualRelationship
+from .visual_genome import VG
 from .constants import BBOX_KEYPOINTS, BBOX_HFLIP, OBJ_CATEGORIES, REL_CATEGORIES, REL_CATEGORIES_FLIP
-from . import metric
 from .. import headmeta
 from ..raf import Raf
 from ..toannotations import ToRafAnnotations, Raf_HFlip
 
-class VisualRelationshipModule(openpifpaf.datasets.DataModule):
-    train_image_dir = "data/visual_relationship/sg_dataset/sg_train_images"
-    val_image_dir = "data/visual_relationship/sg_dataset/sg_test_images"
+class VGModule(openpifpaf.datasets.DataModule):
+    train_image_dir = "data/visual_genome/VG_100K"
+    val_image_dir = "data/visual_genome/VG_100K"
     eval_image_dir = val_image_dir
-    train_annotations = "data/visual_relationship/annotations_train.json"
-    val_annotations = "data/visual_relationship/annotations_test.json"
+    train_annotations = "data/visual_genome/rel_annotations_train.json"
+    val_annotations = "data/visual_genome/rel_annotations_val.json"
     eval_annotations = val_annotations
     debug = False
     pin_memory = False
@@ -41,62 +40,61 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
     def __init__(self):
         super().__init__()
 
-        raf = headmeta.Raf('raf', 'visual_relationship', self.obj_categories, self.rel_categories)
+        raf = headmeta.Raf('raf', 'vg', self.obj_categories, self.rel_categories)
         raf.upsample_stride = self.upsample_stride
-        #cifdet = openpifpaf.headmeta.CifDet('cifdet', 'visual_relationship', self.obj_categories)
-        cifdet = headmeta.CifDet_deep('cifdet', 'visual_relationship', self.obj_categories)
+        cifdet = openpifpaf.headmeta.CifDet('cifdet', 'vg', self.obj_categories)
         cifdet.upsample_stride = self.upsample_stride
         self.head_metas = [cifdet, raf]
 
 
     @classmethod
     def cli(cls, parser: argparse.ArgumentParser):
-        group = parser.add_argument_group('data module Visual Relationship')
+        group = parser.add_argument_group('data module Visual Genome')
 
-        group.add_argument('--visual-relationship-train-annotations',
+        group.add_argument('--vg-train-annotations',
                            default=cls.train_annotations)
-        group.add_argument('--visual-relationship-val-annotations',
+        group.add_argument('--vg-val-annotations',
                            default=cls.val_annotations)
-        group.add_argument('--visual-relationship-train-image-dir',
+        group.add_argument('--vg-train-image-dir',
                            default=cls.train_image_dir)
-        group.add_argument('--visual-relationship-val-image-dir',
+        group.add_argument('--vg-val-image-dir',
                            default=cls.val_image_dir)
 
-        group.add_argument('--visual-relationship-n-images',
+        group.add_argument('--vg-n-images',
                            default=cls.n_images, type=int,
                            help='number of images to sample')
-        group.add_argument('--visual-relationship-square-edge',
+        group.add_argument('--vg-square-edge',
                            default=cls.square_edge, type=int,
                            help='square edge of input images')
         assert not cls.extended_scale
-        group.add_argument('--visual-relationship-extended-scale',
+        group.add_argument('--vg-extended-scale',
                            default=False, action='store_true',
                            help='augment with an extended scale range')
-        group.add_argument('--visual-relationship-orientation-invariant',
+        group.add_argument('--vg-orientation-invariant',
                            default=cls.orientation_invariant, type=float,
                            help='augment with random orientations')
         assert cls.augmentation
-        group.add_argument('--visual-relationship-no-augmentation',
-                           dest='visual_relationship_augmentation',
+        group.add_argument('--vg-no-augmentation',
+                           dest='vg_augmentation',
                            default=True, action='store_false',
                            help='do not apply data augmentation')
-        group.add_argument('--visual-relationship-rescale-images',
+        group.add_argument('--vg-rescale-images',
                            default=cls.rescale_images, type=float,
                            help='overall rescale factor for images')
 
-        group.add_argument('--visual-relationship-upsample',
+        group.add_argument('--vg-upsample',
                            default=cls.upsample_stride, type=int,
                            help='head upsample stride')
-        group.add_argument('--visual-relationship-special-preprocess',
-                           dest='visual_relationship_special_preprocess',
+        group.add_argument('--vg-special-preprocess',
+                           dest='vg_special_preprocess',
                            default=False, action='store_true',
                            help='do not apply data augmentation')
-        group.add_argument('--visual-relationship-max-long-edge',
-                           dest='visual_relationship_max_long_edge',
+        group.add_argument('--vg-max-long-edge',
+                           dest='vg_max_long_edge',
                            default=False, action='store_true',
                            help='do not apply data augmentation')
-        group.add_argument('--visual-relationship-no-flipping',
-                           dest='visual_relationship_no_flipping',
+        group.add_argument('--vg-no-flipping',
+                           dest='vg_no_flipping',
                            default=False, action='store_true',
                            help='do not apply data augmentation')
 
@@ -106,23 +104,23 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
         cls.debug = args.debug
         cls.pin_memory = args.pin_memory
 
-        # visual relationship specific
-        cls.train_annotations = args.visual_relationship_train_annotations
-        cls.val_annotations = args.visual_relationship_val_annotations
-        cls.train_image_dir = args.visual_relationship_train_image_dir
-        cls.val_image_dir = args.visual_relationship_val_image_dir
-        cls.eval_image_dir = cls.val_image_dir #cls.val_image_dir
-        cls.eval_annotations = cls.val_annotations #cls.val_annotations
-        cls.n_images = args.visual_relationship_n_images
-        cls.square_edge = args.visual_relationship_square_edge
-        cls.extended_scale = args.visual_relationship_extended_scale
-        cls.orientation_invariant = args.visual_relationship_orientation_invariant
-        cls.augmentation = args.visual_relationship_augmentation
-        cls.rescale_images = args.visual_relationship_rescale_images
-        cls.upsample_stride = args.visual_relationship_upsample
-        cls.special_preprocess = args.visual_relationship_special_preprocess
-        cls.max_long_edge = args.visual_relationship_max_long_edge
-        cls.no_flipping = args.visual_relationship_no_flipping
+        # visual genome specific
+        cls.train_annotations = args.vg_train_annotations
+        cls.val_annotations = args.vg_val_annotations
+        cls.train_image_dir = args.vg_train_image_dir
+        cls.val_image_dir = args.vg_val_image_dir
+        cls.eval_image_dir = cls.val_image_dir
+        cls.eval_annotations = cls.val_annotations
+        cls.n_images = args.vg_n_images
+        cls.square_edge = args.vg_square_edge
+        cls.extended_scale = args.vg_extended_scale
+        cls.orientation_invariant = args.vg_orientation_invariant
+        cls.augmentation = args.vg_augmentation
+        cls.rescale_images = args.vg_rescale_images
+        cls.upsample_stride = args.vg_upsample
+        cls.special_preprocess = args.vg_special_preprocess
+        cls.max_long_edge = args.vg_max_long_edge
+        cls.no_flipping = args.vg_no_flipping
 
     @staticmethod
     def _convert_data(parent_data, meta):
@@ -231,22 +229,19 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
         ])
 
     def train_loader(self):
-        train_data = VisualRelationship(
+        train_data = VG(
             image_dir=self.train_image_dir,
             ann_file=self.train_annotations,
             preprocess=self._preprocess(),
             n_images=self.n_images,
         )
-
-        self.head_metas[1].fg_matrix, self.head_metas[1].bg_matrix, self.head_metas[1].smoothing_pred = train_data.get_frequency_prior(self.obj_categories, self.rel_categories)
-
         return torch.utils.data.DataLoader(
             train_data, batch_size=self.batch_size, shuffle=not self.debug and self.augmentation,
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=True,
             collate_fn=openpifpaf.datasets.collate_images_targets_meta)
 
     def val_loader(self):
-        val_data = VisualRelationship(
+        val_data = VG(
             image_dir=self.val_image_dir,
             ann_file=self.val_annotations,
             preprocess=self._preprocess(),
@@ -292,38 +287,36 @@ class VisualRelationshipModule(openpifpaf.datasets.DataModule):
             orientation_t,
             openpifpaf.transforms.ToAnnotations([
                 ToRafAnnotations(self.obj_categories, self.rel_categories),
-                openpifpaf.transforms.ToDetAnnotations(self.obj_categories),
+                openpifpaf.transforms.ToCrowdAnnotations(self.obj_categories),
             ]),
             openpifpaf.transforms.EVAL_TRANSFORM,
         ])
-
     def _get_fg_matrix(self):
         # train_data = VisualRelationship(
         #     image_dir=self.train_image_dir,
         #     ann_file=self.train_annotations
         # )
-        train_data = VisualRelationship(
+        train_data = VG(
             image_dir=self.train_image_dir,
             ann_file=self.train_annotations
         )
 
         self.head_metas[1].fg_matrix, self.head_metas[1].bg_matrix, self.head_metas[1].smoothing_pred = train_data.get_frequency_prior(self.obj_categories, self.rel_categories)
 
+
     def eval_loader(self):
-        eval_data = VisualRelationship(
+        eval_data = VG(
             image_dir=self.eval_image_dir,
             ann_file=self.eval_annotations,
             preprocess=self._eval_preprocess(),
             n_images=self.n_images,
             category_ids=[],
         )
-
-        if self.head_metas[1].fg_matrix is None:
-            self._get_fg_matrix()
+        self._get_fg_matrix()
         return torch.utils.data.DataLoader(
             eval_data, batch_size=self.batch_size, shuffle=False,
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=False,
             collate_fn=openpifpaf.datasets.collate_images_anns_meta)
 
-    def metrics(self):
-        return [metric.VRD()]
+    # def metrics(self):
+    #     return [metric.VRD()]

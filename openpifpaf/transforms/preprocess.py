@@ -35,8 +35,13 @@ class Preprocess(metaclass=ABCMeta):
     def annotations_inverse(annotations, meta):
         annotations = copy.deepcopy(annotations)
 
-        for ann in annotations:
-            PREPROCESS_INVERSE[type(ann)](ann, meta)
+        if len(annotations)>0 and isinstance(annotations[0], list):
+            for ann in annotations:
+                    for ann_instance in ann:
+                        PREPROCESS_INVERSE[type(ann_instance)](ann_instance, meta)
+        else:
+            for ann in annotations:
+                PREPROCESS_INVERSE[type(ann)](ann, meta)
 
         return annotations
 

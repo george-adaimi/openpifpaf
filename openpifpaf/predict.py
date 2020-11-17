@@ -51,6 +51,8 @@ def cli():
                         help='number of workers for data loading')
     parser.add_argument('--disable-cuda', action='store_true',
                         help='disable CUDA')
+    parser.add_argument('--dataset-matrix', default=None, type=str,
+                        help='use dataset specific frequency priors')
     args = parser.parse_args()
 
     if args.debug_images:
@@ -93,6 +95,12 @@ def processor_factory(args):
         model.head_nets = model_cpu.head_nets
 
     head_metas = [hn.meta for hn in model.head_nets]
+
+    if not args.dataset_matrix is None:
+        datamodule = datasets.factory(args.dataset_matrix)
+        datamodule._get_fg_matrix()
+        head_metas[1].fg_matrix = datamodule.head_metas[1].fg_matrix
+        head_metas[1].smoothing_pred = datamodule.head_metas[1].smoothing_pred
     processor = decoder.factory(
         head_metas, profile=args.profile_decoder, profile_device=args.device)
     return processor, model
@@ -108,7 +116,8 @@ def preprocess_factory(args):
         assert args.long_edge, '--long-edge must be provided for batch size > 1'
         pad_t = transforms.CenterPad(args.long_edge)
     else:
-        pad_t = transforms.CenterPadTight(16)
+        #pad_t = transforms.CenterPadTight(16)
+        pad_t = transforms.CenterPadTight(32)
 
     return transforms.Compose([
         transforms.NormalizeAnnotations(),
@@ -165,6 +174,8 @@ def main():
         # unbatch
         for pred, meta in zip(pred_batch, meta_batch):
             LOG.info('batch %d: %s', batch_i, meta['file_name'])
+            if len(pred)>0 and isinstance(pred[0], list):
+                pred, _ = pred
             pred = preprocess.annotations_inverse(pred, meta)
 
             # load the original image if necessary
@@ -180,6 +191,7 @@ def main():
                     args.json_output, meta['file_name'], '.predictions.json')
                 LOG.debug('json output = %s', json_out_name)
                 with open(json_out_name, 'w') as f:
+                    pred.sort(key=lambda x: x.score, reverse=True)
                     json.dump([ann.json_data() for ann in pred], f)
 
             # image output

@@ -68,10 +68,17 @@ class Trainer():
                 return result
 
             self.train_batch = train_batch_with_profile
+        self.condition_HG = (isinstance(self.model, torch.nn.DataParallel) and self.model.module.base_net.__class__.__name__=="HGNet_base")\
+            or (not isinstance(self.model, torch.nn.DataParallel) and self.model.base_net.__class__.__name__=="HGNet_base")
 
+        added_loss = []
+        if self.condition_HG:
+            nstack = self.model.module.base_net.nstack if isinstance(self.model, torch.nn.DataParallel) else self.model.base_net.nstack
+            for i in range(nstack-1):
+                added_loss.append("hg_intermediate.stack{}".format(i))
         LOG.info({
             'type': 'config',
-            'field_names': self.loss.field_names,
+            'field_names': self.loss.field_names + added_loss,
         })
 
     def lr(self):
@@ -130,10 +137,20 @@ class Trainer():
                        for head in targets]
 
         # train encoder
+
         with torch.autograd.profiler.record_function('model'):
             outputs = self.model(data)
+            if self.condition_HG:
+                outputs, combined_hm_preds = outputs
         with torch.autograd.profiler.record_function('loss'):
             loss, head_losses = self.loss(outputs, targets)
+            if self.condition_HG:
+                if isinstance(self.model, torch.nn.DataParallel):
+                    loss_intermediate = self.model.module.base_net.calc_inter_loss(combined_hm_preds, torch.cat((targets[0][:,:,0], targets[1][:,:,1]),1))
+                else:
+                    loss_intermediate = self.model.base_net.calc_inter_loss(combined_hm_preds, torch.cat((targets[0][:,:,0], targets[1][:,:,1]),1))
+                head_losses.extend(loss_intermediate)
+                loss = loss + torch.stack(loss_intermediate, dim=0).sum()
         if loss is not None:
             with torch.autograd.profiler.record_function('backward'):
                 loss.backward()
@@ -165,10 +182,18 @@ class Trainer():
             targets = [head.to(self.device, non_blocking=True)
                        if head is not None else None
                        for head in targets]
-
         with torch.no_grad():
             outputs = self.model(data)
+            if self.condition_HG:
+                outputs, combined_hm_preds = outputs
             loss, head_losses = self.loss(outputs, targets)
+            if self.condition_HG:
+                if isinstance(self.model, torch.nn.DataParallel):
+                    loss_intermediate = self.model.module.base_net.calc_inter_loss(combined_hm_preds, torch.cat((targets[0][:,:,0], targets[1][:,:,1]),1))
+                else:
+                    loss_intermediate = self.model.base_net.calc_inter_loss(combined_hm_preds, torch.cat((targets[0][:,:,0], targets[1][:,:,1]),1))
+                head_losses.extend(loss_intermediate)
+                loss = loss + torch.stack(loss_intermediate, dim=0).sum()
 
         return (
             float(loss.item()) if loss is not None else None,

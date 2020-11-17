@@ -38,11 +38,16 @@ class Shell(torch.nn.Module):
             image_batch = self.process_input(image_batch)
 
         x = self.base_net(image_batch)
+        has_combined = False
+        if isinstance(x, tuple):
+            has_combined=True
+            x, combined_hm_preds = x
         head_outputs = [hn(x) for hn in self.head_nets]
 
         if self.process_heads is not None:
             head_outputs = self.process_heads(head_outputs)
-
+        if has_combined and self.base_net.training:
+            return head_outputs, combined_hm_preds
         return head_outputs
 
 

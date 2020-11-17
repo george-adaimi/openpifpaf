@@ -1,126 +1,32 @@
-"""Head networks."""
-
 import argparse
-import functools
 import logging
 import math
 
-import numpy as np
 import torch
+from torch import nn
 
-from .. import headmeta
+import openpifpaf
+from openpifpaf import headmeta
+from openpifpaf.network.heads import index_field_torch
 
 LOG = logging.getLogger(__name__)
 
+class convolution(nn.Module):
+    def __init__(self, k, inp_dim, out_dim, stride=1, with_bn=True):
+        super(convolution, self).__init__()
 
-@functools.lru_cache(maxsize=16)
-def index_field_torch(shape, *, device=None, unsqueeze=(0, 0)):
-    yx = np.indices(shape, dtype=np.float32)
-    xy = np.flip(yx, axis=0)
+        pad = (k - 1) // 2
+        self.conv = nn.Conv2d(inp_dim, out_dim, (k, k), padding=(pad, pad), stride=(stride, stride), bias=not with_bn)
+        self.bn   = nn.BatchNorm2d(out_dim) if with_bn else nn.Sequential()
+        self.relu = nn.ReLU(inplace=True)
 
-    xy = torch.from_numpy(xy.copy())
-    if device is not None:
-        xy = xy.to(device, non_blocking=True)
+    def forward(self, x):
+        conv = self.conv(x)
+        bn   = self.bn(conv)
+        relu = self.relu(bn)
+        return relu
 
-    for dim in unsqueeze:
-        xy = torch.unsqueeze(xy, dim)
-
-    return xy
-
-
-class PifHFlip(torch.nn.Module):
-    def __init__(self, keypoints, hflip):
-        super().__init__()
-
-        flip_indices = torch.LongTensor([
-            keypoints.index(hflip[kp_name]) if kp_name in hflip else kp_i
-            for kp_i, kp_name in enumerate(keypoints)
-        ])
-        LOG.debug('hflip indices: %s', flip_indices)
-        self.register_buffer('flip_indices', flip_indices)
-
-    def forward(self, *args):
-        out = []
-        for field in args:
-            field = torch.index_select(field, 1, self.flip_indices)
-            field = torch.flip(field, dims=[len(field.shape) - 1])
-            out.append(field)
-
-        # flip the x-coordinate of the vector component
-        out[1][:, :, 0, :, :] *= -1.0
-
-        return out
-
-
-class PafHFlip(torch.nn.Module):
-    def __init__(self, keypoints, skeleton, hflip):
-        super().__init__()
-        skeleton_names = [
-            (keypoints[j1 - 1], keypoints[j2 - 1])
-            for j1, j2 in skeleton
-        ]
-        flipped_skeleton_names = [
-            (hflip[j1] if j1 in hflip else j1, hflip[j2] if j2 in hflip else j2)
-            for j1, j2 in skeleton_names
-        ]
-        LOG.debug('skeleton = %s, flipped_skeleton = %s',
-                  skeleton_names, flipped_skeleton_names)
-
-        flip_indices = list(range(len(skeleton)))
-        reverse_direction = []
-        for paf_i, (n1, n2) in enumerate(skeleton_names):
-            if (n1, n2) in flipped_skeleton_names:
-                flip_indices[paf_i] = flipped_skeleton_names.index((n1, n2))
-            if (n2, n1) in flipped_skeleton_names:
-                flip_indices[paf_i] = flipped_skeleton_names.index((n2, n1))
-                reverse_direction.append(paf_i)
-        LOG.debug('hflip indices: %s, reverse: %s', flip_indices, reverse_direction)
-
-        self.register_buffer('flip_indices', torch.LongTensor(flip_indices))
-        self.register_buffer('reverse_direction', torch.LongTensor(reverse_direction))
-
-    def forward(self, *args):
-        out = []
-        for field in args:
-            field = torch.index_select(field, 1, self.flip_indices)
-            field = torch.flip(field, dims=[len(field.shape) - 1])
-            out.append(field)
-
-        # flip the x-coordinate of the vector components
-        out[1][:, :, 0, :, :] *= -1.0
-        out[2][:, :, 0, :, :] *= -1.0
-
-        # reverse direction
-        for paf_i in self.reverse_direction:
-            cc = torch.clone(out[1][:, paf_i])
-            out[1][:, paf_i] = out[2][:, paf_i]
-            out[2][:, paf_i] = cc
-
-        return out
-
-
-class HeadNetwork(torch.nn.Module):
-    """Base class for head networks.
-
-    :param meta: head meta instance to configure this head network
-    :param in_features: number of input features which should be equal to the
-        base network's output features
-    """
-    def __init__(self, meta: headmeta.Base, in_features: int):
-        super().__init__()
-        self.meta = meta
-        self.in_features = in_features
-
-    @classmethod
-    def cli(cls, parser: argparse.ArgumentParser):
-        """Command line interface (CLI) to extend argument parser."""
-
-    @classmethod
-    def configure(cls, args: argparse.Namespace):
-        """Take the parsed argument parser output and configure class variables."""
-
-
-class CompositeField3(HeadNetwork):
+class DeepCompositeField3(openpifpaf.network.HeadNetwork):
     dropout_p = 0.0
     inplace_ops = True
 
@@ -138,9 +44,25 @@ class CompositeField3(HeadNetwork):
         self.dropout = torch.nn.Dropout2d(p=self.dropout_p)
 
         # convolution
-        out_features = meta.n_fields * (meta.n_confidences + meta.n_vectors * 3 + meta.n_scales)
-        self.conv = torch.nn.Conv2d(in_features, out_features * (meta.upsample_stride ** 2),
-                                    kernel_size, padding=padding, dilation=dilation)
+        self.conv_cnf = None
+        self.conv_regr = None
+        self.conv_scales = None
+
+        if meta.n_confidences > 0 :
+            self.conv_cnf = nn.Sequential(
+                                convolution(3, in_features, in_features, with_bn=False),
+                                nn.Conv2d(in_features, meta.n_fields * (meta.n_confidences)* (meta.upsample_stride ** 2), (1, 1))
+                            )
+        if meta.n_vectors > 0:
+            self.conv_regr = nn.Sequential(
+                                convolution(3, in_features, in_features, with_bn=False),
+                                nn.Conv2d(in_features, meta.n_fields * (meta.n_vectors * 3)* (meta.upsample_stride ** 2), (1, 1))
+                            )
+        if meta.n_scales > 0:
+            self.conv_scales = nn.Sequential(
+                                convolution(3, in_features, in_features, with_bn=False),
+                                nn.Conv2d(in_features, meta.n_fields * (meta.n_scales)* (meta.upsample_stride ** 2), (1, 1))
+                            )
 
         # upsample
         assert meta.upsample_stride >= 1
@@ -150,11 +72,11 @@ class CompositeField3(HeadNetwork):
 
     @classmethod
     def cli(cls, parser: argparse.ArgumentParser):
-        group = parser.add_argument_group('CompositeField3')
-        group.add_argument('--cf3-dropout', default=cls.dropout_p, type=float,
+        group = parser.add_argument_group('DeepCompositeField3')
+        group.add_argument('--dcf3-dropout', default=cls.dropout_p, type=float,
                            help='[experimental] zeroing probability of feature in head input')
         assert cls.inplace_ops
-        group.add_argument('--cf3-no-inplace-ops', dest='cf3_inplace_ops',
+        group.add_argument('--dcf3-no-inplace-ops', dest='cf3_inplace_ops',
                            default=True, action='store_false',
                            help='alternative graph without inplace ops')
 
@@ -169,7 +91,23 @@ class CompositeField3(HeadNetwork):
 
     def forward(self, x):  # pylint: disable=arguments-differ
         x = self.dropout(x)
-        x = self.conv(x)
+        tensor_toconcat = []
+        classes_x = None
+        if self.conv_cnf is not None:
+            classes_x = self.conv_cnf(x)
+            tensor_toconcat.append(classes_x)
+
+        regr_x = None
+        if self.conv_regr is not None:
+            regr_x = self.conv_regr(x)
+            tensor_toconcat.append(regr_x)
+
+        scales_x = None
+        if self.conv_scales is not None:
+            scales_x = self.conv_scales(x)
+            tensor_toconcat.append(scales_x)
+
+        x = torch.cat(tensor_toconcat, dim=1)
         # upscale
         if self.upsample_op is not None:
             x = self.upsample_op(x)

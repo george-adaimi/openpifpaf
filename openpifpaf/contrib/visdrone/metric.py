@@ -6,7 +6,7 @@ from tqdm import tqdm
 from PIL import Image
 
 from openpifpaf.metric.base import Base
-from visdroneval.utils import calcAccuracy, dropObjectsInIgr
+#from visdroneval.utils import calcAccuracy, dropObjectsInIgr
 
 LOG = logging.getLogger(__name__)
 

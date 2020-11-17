@@ -1,5 +1,6 @@
 from openpifpaf.encoder import AnnRescalerDet
 import numpy as np
+import copy
 
 class AnnRescalerRel(AnnRescalerDet):
     def bg_mask(self, anns, width_height, *, crowd_margin):
@@ -15,8 +16,9 @@ class AnnRescalerRel(AnnRescalerDet):
     def relations(self, anns):
         dict_temp = {}
         for ann in anns:
-            ann['bbox'] = ann['bbox'] / self.stride
-            dict_temp[ann['detection_id']] = ann
+            dict_temp[ann['detection_id']] = copy.deepcopy(ann)
+            dict_temp[ann['detection_id']]['bbox'] = dict_temp[ann['detection_id']]['bbox'] / self.stride
+
         for k, ann in dict_temp.items():
             ann['predicate'] = [other_pred for other_ind, other_pred in zip(ann['object_index'], ann['predicate']) if other_ind in dict_temp.keys()]
             ann['object_index'] = [other_ind for other_ind in ann['object_index'] if other_ind in dict_temp.keys()]

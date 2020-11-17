@@ -17,6 +17,10 @@ class Raf(headmeta.Base):
     decoder_min_distance = 0.0
     decoder_max_distance = float('inf')
     decoder_confidence_scales: List[float] = None
+    fg_matrix = None
+    bg_matrix = None
+    smoothing_pred = None
+
     @property
     def n_fields(self):
         return len(self.rel_categories)
@@ -41,3 +45,9 @@ class Raf(headmeta.Base):
             ]
         )
         return concatenated
+
+@dataclass
+class CifDet_deep(headmeta.CifDet):
+    @property
+    def n_fields(self):
+        return len(self.categories)

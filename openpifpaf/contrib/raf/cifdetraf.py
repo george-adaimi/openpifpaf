@@ -9,6 +9,7 @@ from typing import List
 
 import heapq
 import numpy as np
+from scipy.special import softmax, expit
 
 from openpifpaf.annotation import AnnotationDet
 from .annotation import AnnotationRaf
@@ -32,6 +33,12 @@ class CifDetRaf(Decoder):
     greedy = False
     keypoint_threshold = 0.0
     nms = True
+
+    lamb = 0.7
+    pred_dist = None
+    add_weights = False
+    add_reverse = False
+    max_score = True
 
     def __init__(self,
                 cifdet_metas: List[headmeta.CifDet],
@@ -105,7 +112,9 @@ class CifDetRaf(Decoder):
 
         occupied = utils.Occupancy(cifdethr.accumulated.shape, 2, min_scale=4)
         annotations_det = []
-
+        if self.pred_dist is None and not self.raf_metas[0].fg_matrix is None:
+            self.pred_dist = np.log(self.raf_metas[0].fg_matrix / (self.raf_metas[0].fg_matrix.sum(2)[:, :, None] + 1e-08) + 1e-3)
+            self.pred_dist = softmax(self.pred_dist, axis=2)
 
         def mark_occupied(ann):
             for joint_i, xyv in enumerate(ann.data):
@@ -122,13 +131,15 @@ class CifDetRaf(Decoder):
             annotations_det.append(ann)
             #mark_occupied(ann)
             occupied.set(f, x, y, 0.1 * min(w, h))
-        dict_rel = {}
 
+        dict_rel = {}
+        dict_rel_cnt = {}
         if self.nms is not None:
-            annotations_det = self.nms.annotations(annotations_det)
+            #annotations_det = self.nms.annotations(annotations_det)
+            annotations_det = self.nms.annotations_per_category(annotations_det, nms_type='snms')
 
         annotations = []
-        for raf_v, index_s, x_s, y_s, raf_i, index_o, x_o, y_o in raf_analyzer.triplets:
+        for raf_v, index_s, x_s, y_s, raf_i, index_o, x_o, y_o in raf_analyzer.triplets[(-raf_analyzer.triplets[:,0]).argsort()]:
             s_idx = None
             o_idx = None
             min_value_s = None
@@ -147,14 +158,50 @@ class CifDetRaf(Decoder):
                     min_value_o = curr_dist
                     o_idx = ann_idx
             if (s_idx, raf_i, o_idx) in dict_rel:
-                annotations[dict_rel[(s_idx, raf_i, o_idx)]-1].score_rel += raf_v
+                indx = dict_rel[(s_idx, raf_i, o_idx)]-1
+                cnt = dict_rel_cnt[(s_idx, raf_i, o_idx)]
+                category_id_obj = annotations[indx].category_id_obj
+                category_id_sub = annotations[indx].category_id_sub
+                if not self.pred_dist is None:
+                    weight = self.lamb*(self.pred_dist[category_id_sub-1, category_id_obj-1, int(raf_i)])
+                    weight = (weight + (1-self.lamb)*self.raf_metas[0].smoothing_pred[int(raf_i)])
+                if self.add_weights:
+                    score_rel = expit(5*(raf_v + weight-1))
+                else:
+                    score_rel = raf_v*weight
+                if self.max_score:
+                    annotations[indx].score_rel = max(annotations[indx].score_rel, score_rel)
+                else:
+                    annotations[indx].score_rel = (annotations[indx].score_rel*cnt + score_rel)/(cnt+1)
+                dict_rel_cnt[(s_idx, raf_i, o_idx)] = cnt + 1
+                if self.add_reverse:
+                    indx = dict_rel[(o_idx, raf_i, s_idx)]-1
+                    cnt = dict_rel_cnt[(o_idx, raf_i, s_idx)]
+                    if not self.pred_dist is None:
+                        weight = self.lamb*(self.pred_dist[category_id_obj-1, category_id_sub-1, int(raf_i)])
+                        weight = (weight + (1-self.lamb)*self.raf_metas[0].smoothing_pred[int(raf_i)])
+                    if self.add_weights:
+                        score_rel = expit(5*(raf_v + weight-1))
+                    else:
+                        score_rel = raf_v*weight
+
+                    annotations[indx].score_rel = (annotations[indx].score_rel*cnt + score_rel)/(cnt+1)
+                    dict_rel_cnt[(o_idx, raf_i, s_idx)] = cnt + 1
+
             else:
                 if s_idx is not None and o_idx is not None:
                     category_id_obj = annotations_det[o_idx].category_id
                     category_id_sub = annotations_det[s_idx].category_id
                     category_id_rel = int(raf_i) + 1
                     score_sub = annotations_det[s_idx].score
-                    score_rel = raf_v
+                    weight = 1.0
+                    if not self.pred_dist is None:
+                        weight = self.lamb*(self.pred_dist[category_id_sub-1, category_id_obj-1, int(raf_i)])
+                        weight = (weight + (1-self.lamb)*self.raf_metas[0].smoothing_pred[int(raf_i)])
+                    if self.add_weights:
+                        score_rel = expit(5*(raf_v + weight-1))
+                    else:
+                        score_rel = raf_v * weight
                     score_obj = annotations_det[o_idx].score
                     bbox_sub = copy.deepcopy(annotations_det[s_idx].bbox)
                     bbox_obj = copy.deepcopy(annotations_det[o_idx].bbox)
@@ -166,9 +213,27 @@ class CifDetRaf(Decoder):
                                             bbox_sub, bbox_obj)
                     annotations.append(ann)
                     dict_rel[(s_idx, raf_i, o_idx)] = len(annotations)
+                    dict_rel_cnt[(s_idx, raf_i, o_idx)] = 1
+                    if self.add_reverse:
+                        if not self.pred_dist is None:
+                            weight = self.lamb*(self.pred_dist[category_id_obj-1, category_id_sub-1, int(raf_i)])
+                            weight = (weight + (1-self.lamb)*self.raf_metas[0].smoothing_pred[int(raf_i)])
+                        if self.add_weights:
+                            score_rel = expit(5*(raf_v + weight-1))
+                        else:
+                            score_rel = raf_v * weight
+                        ann = AnnotationRaf(self.raf_metas[0].obj_categories,
+                                            self.raf_metas[0].rel_categories).set(
+                                                category_id_sub, category_id_obj,
+                                                category_id_rel, score_obj,
+                                                score_rel, score_sub,
+                                                bbox_obj, bbox_sub)
+                        annotations.append(ann)
+                        dict_rel[(o_idx, raf_i, s_idx)] = len(annotations)
+                        dict_rel_cnt[(o_idx, raf_i, s_idx)] = 1
 
         self.occupancy_visualizer.predicted(occupied)
 
         LOG.debug('annotations %d, %.3fs', len(annotations), time.perf_counter() - start)
 
-        return annotations
+        return annotations, annotations_det

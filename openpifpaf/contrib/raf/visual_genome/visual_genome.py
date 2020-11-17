@@ -1,35 +1,44 @@
-import os
+from collections import defaultdict
 import copy
 import logging
+import os
 import numpy as np
-import torch.utils.data
-import torchvision
-import json
 
+import torch.utils.data
 from PIL import Image
+
 from openpifpaf import transforms, utils
+
 
 LOG = logging.getLogger(__name__)
 STAT_LOG = logging.getLogger(__name__.replace('openpifpaf.', 'openpifpaf.stats.'))
 
-class VisualRelationship(torch.utils.data.Dataset):
 
+class VG(torch.utils.data.Dataset):
+    """`MS Coco Detection <http://mscoco.org/dataset/#detections-challenge2016>`_ Dataset.
+
+    Args:
+        image_dir (string): Root directory where images are downloaded to.
+        ann_file (string): Path to json annotation file.
+    """
 
     def __init__(self, image_dir, ann_file, *,
                  n_images=None, preprocess=None,
                  category_ids=None):
+        if category_ids is None:
+            category_ids = []
 
-        self.root = image_dir
-        self.imgs = [(os.path.join(self.root, k),v) for k,v in json.load(open(ann_file)).items()]
+        from pycocotools.coco import COCO  # pylint: disable=import-outside-toplevel
+        self.image_dir = image_dir
+        self.coco = COCO(ann_file)
 
-
+        self.ids = list(self.coco.dataset.keys())
         if n_images:
-            self.imgs = self.imgs[:n_images]
+            self.ids = self.ids[:n_images]
+        LOG.info('Images: %d', len(self.ids))
 
-        print('Images: {}'.format(len(self.imgs)))
-
-        # PifPaf
         self.preprocess = preprocess or transforms.EVAL_TRANSFORM
+
 
     def get_frequency_prior(self, obj_categories, rel_categories):
         fg_matrix = np.zeros((
@@ -46,9 +55,10 @@ class VisualRelationship(torch.utils.data.Dataset):
         smoothing_pred = np.zeros(len(rel_categories), dtype=np.float32)
 
         count_pred = 0.0
-        for _, targets in self.imgs:
+        for image_id in self.ids:
             # get all object boxes
             gt_box_to_label = {}
+            targets = self.coco.dataset[image_id]
             for i, target in enumerate(targets):
                 prd_lbl = target['predicate']
                 x = target['subject']['bbox'][2]
@@ -85,28 +95,24 @@ class VisualRelationship(torch.utils.data.Dataset):
         return fg_matrix, bg_matrix, (smoothing_pred/count_pred)
 
     def __getitem__(self, index):
-        """
-        Args:
-            index (int): Index
-        Returns:
-            tuple: Tuple (image, target). target is the object returned by ``coco.loadAnns``.
-        """
-        chosen_img = self.imgs[index]
-        img_path = chosen_img[0]
-        with open(os.path.join(img_path), 'rb') as f:
+        image_id = self.ids[index]
+        targets = self.coco.dataset[image_id]
+
+        LOG.debug(image_id)
+        local_file_path = os.path.join(self.image_dir, image_id)
+        with open(local_file_path, 'rb') as f:
             image = Image.open(f).convert('RGB')
 
-        initial_size = image.size
-        meta_init = {
+        meta = {
             'dataset_index': index,
-            'image_id': index,
-            'file_dir': img_path,
-            'file_name': os.path.basename(img_path),
+            'image_id': image_id,
+            'file_name': image_id,
+            'local_file_path': local_file_path,
         }
 
         anns = []
         dict_counter = {}
-        for target in chosen_img[1]:
+        for target in targets:
             for type_obj in ['subject', 'object']:
                 predicate = target['predicate']
                 x = target[type_obj]['bbox'][2]
@@ -147,9 +153,9 @@ class VisualRelationship(torch.utils.data.Dataset):
                         'object_index': object_index,
                         'predicate': [predicate] if type_obj=='subject' else [],
                     })
+
         # preprocess image and annotations
-        image, anns, meta = self.preprocess(image, anns, None)
-        meta.update(meta_init)
+        image, anns, meta = self.preprocess(image, anns, meta)
 
         # transform image
 
@@ -163,7 +169,4 @@ class VisualRelationship(torch.utils.data.Dataset):
         return image, anns, meta
 
     def __len__(self):
-        return len(self.imgs)
-
-    def write_evaluations(self, eval_class, path, total_time):
-        pass
+        return len(self.ids)

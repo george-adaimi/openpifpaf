@@ -4,8 +4,12 @@ import numpy as np
 import zipfile
 from tqdm import tqdm
 from PIL import Image
+import json
+from collections import defaultdict
 
 from openpifpaf.metric.base import Base
+from ..annotation import AnnotationRaf
+from openpifpaf.annotation import AnnotationDet
 from . import task_evaluator
 
 LOG = logging.getLogger(__name__)
@@ -20,12 +24,17 @@ def mkdir_if_missing(directory):
 
 
 class VRD(Base):
-    text_labels = ['R@20', 'R@50', 'R@100']
+    text_labels = ['R@20_phrdet', 'R@50_phrdet', 'R@100_phrdet', 'R@20_reldet', 'R@50_reldet', 'R@100_reldet']
 
     def __init__(self):
 
         self.roidb_pred = []
         self.image_ids = []
+        self.det_pred = defaultdict(list)
+        self.det_gt = defaultdict(list)
+        self.class2name = {}
+        self.gt_counter_per_class = {}
+        self.more_info = True
 
 
     def accumulate(self, predictions, image_meta, ground_truth=None):
@@ -44,18 +53,27 @@ class VRD(Base):
         image_annotations['width'] = width
         image_annotations['height'] = height
         for gt_ann in ground_truth:
-            pred_data = gt_ann.json_data()
-            sub.append(pred_data['category_id_sub']-1)
-            obj.append(pred_data['category_id_obj']-1)
-            rela.append(pred_data['category_id_rel']-1)
-            x,y,w,h = pred_data['bbox_sub']
-            x1, x2 = np.clip([x, x+w], a_min=0, a_max=width)
-            y1, y2 = np.clip([y, y+h], a_min=0, a_max=height)
-            sub_bbox.append([x1, y1, x2, y2])
-            x,y,w,h = pred_data['bbox_obj']
-            x1, x2 = np.clip([x, x+w], a_min=0, a_max=width)
-            y1, y2 = np.clip([y, y+h], a_min=0, a_max=height)
-            obj_bbox.append([x1, y1, x2, y2])
+            if isinstance(gt_ann, AnnotationRaf):
+                pred_data = gt_ann.json_data()
+                sub.append(pred_data['category_id_sub']-1)
+                obj.append(pred_data['category_id_obj']-1)
+                rela.append(pred_data['category_id_rel']-1)
+                x,y,w,h = pred_data['bbox_sub']
+                x1, x2 = np.clip([x, x+w], a_min=0, a_max=width)
+                y1, y2 = np.clip([y, y+h], a_min=0, a_max=height)
+                sub_bbox.append([x1, y1, x2, y2])
+                x,y,w,h = pred_data['bbox_obj']
+                x1, x2 = np.clip([x, x+w], a_min=0, a_max=width)
+                y1, y2 = np.clip([y, y+h], a_min=0, a_max=height)
+                obj_bbox.append([x1, y1, x2, y2])
+            elif isinstance(gt_ann, AnnotationDet):
+                self.det_gt[image_id].append([gt_ann.category_id-1, gt_ann.bbox, False])
+                self.class2name[gt_ann.category_id-1] = gt_ann.category
+
+                if gt_ann.category in self.gt_counter_per_class:
+                    self.gt_counter_per_class[gt_ann.category] += 1
+                else:
+                    self.gt_counter_per_class[gt_ann.category] = 1
 
         if len(ground_truth) == 0:
             obj = np.zeros(0, dtype=np.int32)
@@ -78,7 +96,7 @@ class VRD(Base):
         sub_bbox = []
         obj_bbox = []
 
-        for pred in predictions:
+        for pred in predictions[0]:
             pred_data = pred.json_data()
             sub.append(pred_data['category_id_sub']-1)
             obj.append(pred_data['category_id_obj']-1)
@@ -105,6 +123,12 @@ class VRD(Base):
         image_annotations['prd_scores'] = np.asarray(rela_scores)
         self.roidb_pred.append(image_annotations)
 
+        for pred in predictions[1]:
+            pred_data = pred.json_data()
+            self.det_pred[pred_data['category_id']-1].append([image_id, pred_data['bbox'], pred_data['score']])
+
+
+
 
     def write_predictions(self, filename, additional_data=None):
         mkdir_if_missing(filename)
@@ -120,10 +144,26 @@ class VRD(Base):
 
     def stats(self):
         recalls = task_evaluator.eval_rel_results(self.roidb_pred)
+        det_metrix = task_evaluator.eval_det_results(self.det_pred, self.det_gt, self.class2name, self.gt_counter_per_class)
+        stats = [det_metrix[0], sum(det_metrix[1].values()), sum(det_metrix[2].values())]
 
+        text_labels = ['det_mAP', 'TP', 'FP']
+        for k1, v1 in recalls.items():
+            for k2, v2 in v1['recall'].items():
+                stats.append(v2)
+                text_labels.append('R@{}_{}'.format(str(k2), k1))
+
+            stats.append(v1['phrdet_acc_50'])
+            text_labels.append('phrdetAcc_50_{}'.format(k1))
+            stats.append(v1['phrdet_acc_100'])
+            text_labels.append('phrdetAcc_100_{}'.format(k1))
+            stats.append(v1['phrdet_acc_full'])
+            text_labels.append('phrdetAccFull_{}'.format(k1))
         data = {
-            'stats': [recalls[20], recalls[50], recalls[100]],
-            'text_labels': self.text_labels,
+            'stats': stats,
+            'text_labels': text_labels,
         }
+        if self.more_info:
+            data['debug'] = det_metrix[3]
 
         return data

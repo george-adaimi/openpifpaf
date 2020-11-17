@@ -14,6 +14,7 @@ from . import metric, show, __version__
 
 try:
     import matplotlib
+    matplotlib.use('Agg')
 except ImportError:
     matplotlib = None
 
@@ -355,8 +356,7 @@ class Plots():
         with show.canvas() as ax:
             self.epoch_loss(ax)
 
-        with show.canvas() as ax:
-            self.preprocess_time(ax)
+
 
         with show.canvas(nrows=n_rows, ncols=n_cols, squeeze=False,
                          figsize=multi_figsize,
@@ -375,6 +375,9 @@ class Plots():
 
         with show.canvas() as ax:
             self.train(ax)
+
+        with show.canvas() as ax:
+            self.preprocess_time(ax)
 
         self.print_last_line()
 

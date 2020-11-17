@@ -1,5 +1,6 @@
 import copy
 import logging
+import numpy as np
 
 from .base import Base
 from ..annotation import AnnotationDet
@@ -36,6 +37,7 @@ class CifDet(Base):
 
         self._confidences(field[:, 0])
         self._regressions(field[:, 1:3], field[:, 3:5],
+                          confidence_fields=field[:, 0],
                           annotations=annotations)
 
     def predicted(self, field):
@@ -49,7 +51,9 @@ class CifDet(Base):
         if not self.show_confidences:
             return
 
-        for f in self.indices:
+        indices = np.arange(confidences.shape[0])[np.nanmax(confidences, axis=(1,2))>0.2]
+
+        for f in indices:
             LOG.debug('%s', self.meta.categories[f])
 
             with self.image_canvas(self._processed_image, margin=[0.0, 0.01, 0.05, 0.01]) as ax:
@@ -62,7 +66,8 @@ class CifDet(Base):
         if not self.show_regressions:
             return
 
-        for f in self.indices:
+        indices = np.arange(confidence_fields.shape[0])[np.nanmax(confidence_fields, axis=(1,2))>0.2]
+        for f in indices:
             LOG.debug('%s', self.meta.categories[f])
             confidence_field = confidence_fields[f] if confidence_fields is not None else None
 
@@ -73,10 +78,10 @@ class CifDet(Base):
                 q = show.quiver(ax,
                                 regression_fields[f, :2],
                                 confidence_field=confidence_field,
-                                xy_scale=self.meta.stride, uv_is_offset=uv_is_offset,
+                                xy_scale=self.meta.stride, threshold=0.3, uv_is_offset=uv_is_offset,
                                 cmap='Greens', clim=(0.5, 1.0), width=0.001)
                 show.boxes_wh(ax, wh_fields[f, 0], wh_fields[f, 1],
-                              confidence_field=confidence_field,
+                              confidence_field=confidence_field, threshold=0.3,
                               regression_field=regression_fields[f, :2],
                               xy_scale=self.meta.stride, cmap='Greens',
                               fill=False, linewidth=2,
