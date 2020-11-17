@@ -16,7 +16,7 @@ dist/
 .ipynb_checkpoints/
 openpifpaf/functional.cpython-*
 openpifpaf/functional.html
-
+*.pyc
 # guide
 guide/_build/
 guide/coco/*.predictions.png
