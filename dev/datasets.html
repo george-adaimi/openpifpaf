@@ -1,5 +1,4 @@
 
-
 <!DOCTYPE html>
 
 <html>
@@ -7,26 +6,46 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Datasets &#8212; OpenPifPaf Guide DEV</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/all.min.css" integrity="sha384-KA6wR/X5RY4zFAHpv/CnoG2UW1uogYfdnP67Uv7eULvTveboZJg0qUpmJZb5VqzN" crossorigin="anonymous">
-    <link href="_static/css/index.css" rel="stylesheet">
-    <link rel="stylesheet" href="_static/sphinx-book-theme.css" type="text/css" />
+    
+  <link rel="stylesheet" href="_static/css/index.73d71520a4ca3b99cfee5594769eaaae.css">
+
+    
+  <link rel="stylesheet"
+    href="_static/vendor/fontawesome/5.13.0/css/all.min.css">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="_static/vendor/fontawesome/5.13.0/webfonts/fa-solid-900.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="_static/vendor/fontawesome/5.13.0/webfonts/fa-brands-400.woff2">
+
+    
+      
+  <link rel="stylesheet"
+    href="_static/vendor/open-sans_all/1.44.1/index.css">
+  <link rel="stylesheet"
+    href="_static/vendor/lato_latin-ext/1.44.1/index.css">
+
+    
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/sphinx-book-theme.40e2e510f6b7d1648584402491bb10fe.css" type="text/css" />
     <link rel="stylesheet" type="text/css" href="_static/togglebutton.css" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css" />
     <link rel="stylesheet" type="text/css" href="_static/mystnb.css" />
     <link rel="stylesheet" type="text/css" href="_static/sphinx-thebe.css" />
-    <link rel="stylesheet" type="text/css" href="_static/spanels-index--0afa1ebdab0bb23b98b56d34c23d9f57.css" />
-    <link rel="stylesheet" type="text/css" href="_static/spanels-variables--ffc7f74dcb1b9eecba2dbcbc22818714.css" />
+    <link rel="stylesheet" type="text/css" href="_static/mystyle.css" />
+    <link rel="stylesheet" type="text/css" href="_static/panels-main.c949a650a448cc0ae9fd3441c0e17fb0.css" />
+    <link rel="stylesheet" type="text/css" href="_static/panels-variables.06eb56fa6e07937060861dad626602ad.css" />
+    
+  <link rel="preload" as="script" href="_static/js/index.3da636dd464baa7582d2.js">
+
     <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
     <script src="_static/jquery.js"></script>
     <script src="_static/underscore.js"></script>
     <script src="_static/doctools.js"></script>
-    <script src="_static/language_data.js"></script>
     <script src="_static/togglebutton.js"></script>
     <script src="_static/clipboard.min.js"></script>
     <script src="_static/copybutton.js"></script>
-    <script src="_static/sphinx-book-theme.js"></script>
     <script >var togglebuttonSelector = '.toggle, .admonition.dropdown, .tag_hide_input div.cell_input, .tag_hide-input div.cell_input, .tag_hide_output div.cell_output, .tag_hide-output div.cell_output, .tag_hide_cell.cell, .tag_hide-cell.cell';</script>
+    <script src="_static/sphinx-book-theme.d31b09fe5c1d09cb49b26a786de4a05d.js"></script>
     <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["\\(", "\\)"]], "displayMath": [["\\[", "\\]"]], "processRefs": false, "processEnvironments": false}})</script>
     <script async="async" src="https://unpkg.com/thebelab@latest/lib/index.js"></script>
@@ -40,10 +59,10 @@
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Training" href="train.html" />
-    <link rel="prev" title="Introduction" href="intro.html" />
+    <link rel="prev" title="Models" href="models.html" />
 
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="docsearch:language" content="en">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="docsearch:language" content="en" />
 
 
 
@@ -65,27 +84,51 @@
   <h1 class="site-logo" id="site-title">OpenPifPaf Guide DEV</h1>
   
 </a>
-</div>
-
-<form class="bd-search d-flex align-items-center" action="search.html" method="get">
+</div><form class="bd-search d-flex align-items-center" action="search.html" method="get">
   <i class="icon fas fa-search"></i>
   <input type="search" class="form-control" name="q" id="search-input" placeholder="Search this book..." aria-label="Search this book..." autocomplete="off" >
 </form>
-
 <nav class="bd-links" id="bd-docs-nav" aria-label="Main navigation">
-  <ul class="nav sidenav_l1">
+    <ul class="nav sidenav_l1">
  <li class="toctree-l1">
   <a class="reference internal" href="intro.html">
    Introduction
   </a>
  </li>
 </ul>
-<p class="caption">
+<p class="caption collapsible-parent">
  <span class="caption-text">
   Getting Started
  </span>
 </p>
+<ul class="nav sidenav_l1">
+ <li class="toctree-l1">
+  <a class="reference internal" href="predict_cli.html">
+   Prediction
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="examples.html">
+   Examples
+  </a>
+ </li>
+</ul>
+<p class="caption collapsible-parent">
+ <span class="caption-text">
+  Chapters
+ </span>
+</p>
 <ul class="current nav sidenav_l1">
+ <li class="toctree-l1">
+  <a class="reference internal" href="predict_api.html">
+   Prediction API
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="models.html">
+   Models
+  </a>
+ </li>
  <li class="toctree-l1 current active">
   <a class="current reference internal" href="#">
    Datasets
@@ -97,23 +140,18 @@
   </a>
  </li>
  <li class="toctree-l1">
-  <a class="reference internal" href="predict_cli.html">
-   Prediction
-  </a>
- </li>
- <li class="toctree-l1">
   <a class="reference internal" href="cli_help.html">
-   CLI
-   <code class="docutils literal notranslate">
-    <span class="pre">
-     --help
-    </span>
-   </code>
+   Command Line
   </a>
  </li>
  <li class="toctree-l1">
-  <a class="reference internal" href="examples.html">
-   Examples
+  <a class="reference internal" href="plugins_overview.html">
+   Plugins
+  </a>
+ </li>
+ <li class="toctree-l1">
+  <a class="reference internal" href="plugins_cifar10.html">
+   Plugin: Cifar10
   </a>
  </li>
  <li class="toctree-l1">
@@ -122,41 +160,19 @@
   </a>
  </li>
 </ul>
-<p class="caption">
+<p class="caption collapsible-parent">
  <span class="caption-text">
-  API
+  Reference
  </span>
 </p>
 <ul class="nav sidenav_l1">
- <li class="toctree-l1">
-  <a class="reference internal" href="predict_api.html">
-   Prediction API
-  </a>
- </li>
  <li class="toctree-l1">
   <a class="reference internal" href="moduledocs.html">
    Modules
   </a>
  </li>
 </ul>
-<p class="caption">
- <span class="caption-text">
-  Plugins
- </span>
-</p>
-<ul class="nav sidenav_l1">
- <li class="toctree-l1">
-  <a class="reference internal" href="plugins_overview.html">
-   Overview
-  </a>
- </li>
- <li class="toctree-l1">
-  <a class="reference internal" href="plugins_cifar10.html">
-   Cifar10
-  </a>
- </li>
-</ul>
-<p class="caption">
+<p class="caption collapsible-parent">
  <span class="caption-text">
   Development
  </span>
@@ -188,9 +204,7 @@
  </li>
 </ul>
 
-</nav>
-
- <!-- To handle the deprecated key -->
+</nav> <!-- To handle the deprecated key -->
 
 <div class="navbar_extra_footer">
   This is the dev version of the Guide. Here is the <a href="https://vita-epfl.github.io/openpifpaf/">stable version</a>.
@@ -219,11 +233,11 @@
             <i class="fas fa-arrow-up"></i>
         </button>
         
-        <div class="dropdown-buttons-trigger">
+        
+<div class="dropdown-buttons-trigger">
     <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn" aria-label="Download this page"><i
             class="fas fa-download"></i></button>
 
-    
     <div class="dropdown-buttons">
         <!-- ipynb file if we had a myst markdown file -->
         
@@ -235,14 +249,15 @@
         <button type="button" id="download-print" class="btn btn-secondary topbarbtn" title="Print to PDF"
             onClick="window.print()" data-toggle="tooltip" data-placement="left">.pdf</button>
     </div>
-    
 </div>
+
         <!-- Source interaction buttons -->
 
 
         <!-- Full screen (wrap in <a> to have style consistency -->
         <a class="full-screen-button"><button type="button" class="btn btn-secondary topbarbtn" data-toggle="tooltip"
-                data-placement="bottom" onclick="toggleFullScreen()" title="Fullscreen mode"><i
+                data-placement="bottom" onclick="toggleFullScreen()" aria-label="Fullscreen mode"
+                title="Fullscreen mode"><i
                     class="fas fa-expand"></i></button></a>
 
         <!-- Launch buttons -->
@@ -260,11 +275,6 @@
         
         
         
-        <a class="colab-button" href="https://colab.research.google.com/github/vita-epfl/openpifpaf/blob/dev/guide/datasets.ipynb"><button type="button" class="btn btn-secondary topbarbtn"
-                title="Launch Colab" data-toggle="tooltip" data-placement="left"><img class="colab-button-logo"
-                    src="_static/images/logo_colab.png"
-                    alt="Interact on Colab">Colab</button></a>
-        
         
     </div>
 </div>
@@ -273,6 +283,7 @@
 
     <!-- Table of contents -->
     <div class="d-none d-md-block col-md-2 bd-toc show">
+        
         <div class="tocsection onthispage pt-5 pb-3">
             <i class="fas fa-list"></i> Contents
         </div>
@@ -306,6 +317,7 @@
 </ul>
 
         </nav>
+        
     </div>
 </div>
     <div id="main-content" class="row">
@@ -313,8 +325,7 @@
         
               <div>
                 
-  <p><a class="reference external" href="https://www.svenkreiss.com/">Sven Kreiss</a>, 2020</p>
-<div class="section" id="datasets">
+  <div class="section" id="datasets">
 <h1>Datasets<a class="headerlink" href="#datasets" title="Permalink to this headline">¶</a></h1>
 <p>This section describes how to install common datasets used for training new models and for computing evaluation scores for entire datasets. In general, these datasets are large and require a computer with a good GPU to train and evaluate in reasonable times.</p>
 <p>These datasets are not required to do pose predictions on your own images.</p>
@@ -324,23 +335,19 @@
 <p><a class="reference external" href="http://cocodataset.org/">COCO</a> is a great datasets containing many types of annotations, including bounding boxes, 2D poses, etc.</p>
 <div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>mkdir data-mscoco
 <span class="nb">cd</span> data-mscoco
-gsutil ls gs://images.cocodataset.org  <span class="c1"># to list available directories</span>
 
-mkdir -p images/val2017
-gsutil -m rsync gs://images.cocodataset.org/val2017 images/val2017
-
-mkdir -p images/train2017
-gsutil -m rsync gs://images.cocodataset.org/train2017 images/train2017
-
-gsutil cp gs://images.cocodataset.org/annotations/annotations_trainval2017.zip .
-<span class="c1"># or</span>
 wget http://images.cocodataset.org/annotations/annotations_trainval2017.zip
-unzip annotations_trainval2017.zip
 wget http://images.cocodataset.org/annotations/image_info_test2017.zip
+unzip annotations_trainval2017.zip
 unzip image_info_test2017.zip
 
-<span class="c1"># test images: run inside of images directory</span>
+mkdir images
+<span class="nb">cd</span> images
+wget http://images.cocodataset.org/zips/val2017.zip
+wget http://images.cocodataset.org/zips/train2017.zip
 wget http://images.cocodataset.org/zips/test2017.zip
+unzip val2017.zip
+unzip train2017.zip
 unzip test2017.zip
 </pre></div>
 </div>
@@ -358,7 +365,9 @@ unzip test2017.zip
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">openpifpaf</span>
-<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">openpifpaf</span><span class="o">.</span><span class="n">datasets</span><span class="o">.</span><span class="n">constants</span><span class="o">.</span><span class="n">COCO_KEYPOINTS</span><span class="p">):</span>
+<span class="n">openpifpaf</span><span class="o">.</span><span class="n">plugin</span><span class="o">.</span><span class="n">register</span><span class="p">()</span>
+
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">openpifpaf</span><span class="o">.</span><span class="n">plugins</span><span class="o">.</span><span class="n">coco</span><span class="o">.</span><span class="n">constants</span><span class="o">.</span><span class="n">COCO_KEYPOINTS</span><span class="p">):</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -388,8 +397,8 @@ unzip test2017.zip
 <div class="cell docutils container">
 <div class="cell_input docutils container">
 <div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s1">&#39;associations&#39;</span><span class="p">)</span>
-<span class="n">kp_names</span> <span class="o">=</span> <span class="n">openpifpaf</span><span class="o">.</span><span class="n">datasets</span><span class="o">.</span><span class="n">constants</span><span class="o">.</span><span class="n">COCO_KEYPOINTS</span>
-<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">joint1</span><span class="p">,</span> <span class="n">joint2</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">openpifpaf</span><span class="o">.</span><span class="n">datasets</span><span class="o">.</span><span class="n">constants</span><span class="o">.</span><span class="n">COCO_PERSON_SKELETON</span><span class="p">):</span>
+<span class="n">kp_names</span> <span class="o">=</span> <span class="n">openpifpaf</span><span class="o">.</span><span class="n">plugins</span><span class="o">.</span><span class="n">coco</span><span class="o">.</span><span class="n">constants</span><span class="o">.</span><span class="n">COCO_KEYPOINTS</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">joint1</span><span class="p">,</span> <span class="n">joint2</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">openpifpaf</span><span class="o">.</span><span class="n">plugins</span><span class="o">.</span><span class="n">coco</span><span class="o">.</span><span class="n">constants</span><span class="o">.</span><span class="n">COCO_PERSON_SKELETON</span><span class="p">):</span>
     <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{:2d}</span><span class="s1">: </span><span class="si">{:15s}</span><span class="s1"> --&gt; </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">kp_names</span><span class="p">[</span><span class="n">joint1</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="n">kp_names</span><span class="p">[</span><span class="n">joint2</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]))</span>
 </pre></div>
 </div>
@@ -470,7 +479,7 @@ unzip nightowls_validation.zip
     
     <div class='prev-next-bottom'>
         
-    <a class='left-prev' id="prev-link" href="intro.html" title="previous page">Introduction</a>
+    <a class='left-prev' id="prev-link" href="models.html" title="previous page">Models</a>
     <a class='right-next' id="next-link" href="train.html" title="next page">Training</a>
 
     </div>
@@ -478,13 +487,9 @@ unzip nightowls_validation.zip
     <div class="container">
       <p>
         
-          By Sven Kreiss<br/>
+          By <a href="https://www.svenkreiss.com">Sven Kreiss</a> and <a href="https://github.com/vita-epfl/openpifpaf/graphs/contributors">contributors</a><br/>
         
-          <div class="extra_footer">
-            &copy; Copyright 2020.
-<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png" /></a> Licensed under <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">CC-BY-NC-SA</a>.
-
-          </div>
+            &copy; Copyright 2020-2021.<br/>
       </p>
     </div>
   </footer>
@@ -494,7 +499,10 @@ unzip nightowls_validation.zip
       </div>
     </div>
 
-    <script src="_static/js/index.js"></script>
+    
+  <script src="_static/js/index.3da636dd464baa7582d2.js"></script>
+
+
     
   </body>
 </html>
