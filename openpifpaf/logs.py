@@ -6,8 +6,6 @@ import datetime
 import json
 import logging
 from pprint import pprint
-import socket
-import sys
 
 import numpy as np
 import pysparkling
@@ -22,36 +20,9 @@ except ImportError:
 LOG = logging.getLogger(__name__)
 
 
-def cli(parser):
-    group = parser.add_argument_group('logging')
-    group.add_argument('--debug', default=False, action='store_true',
-                       help='print debug messages')
-
-
-def configure(args):
-    # pylint: disable=import-outside-toplevel
-    from pythonjsonlogger import jsonlogger
-
-    file_handler = logging.FileHandler(args.output + '.log', mode='w')
-    file_handler.setFormatter(
-        jsonlogger.JsonFormatter('%(message) %(levelname) %(name) %(asctime)'))
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    logging.basicConfig(handlers=[stdout_handler, file_handler])
-    log_level = logging.INFO if not args.debug else logging.DEBUG
-    logging.getLogger('openpifpaf').setLevel(log_level)
-    LOG.info({
-        'type': 'process',
-        'argv': sys.argv,
-        'args': vars(args),
-        'version': __version__,
-        'hostname': socket.gethostname(),
-    })
-    return log_level
-
-
 def optionally_shaded(ax, x, y, *, color, label, **kwargs):
     stride = int(len(x) / (x[-1] - x[0]) / 30.0) if len(x) > 30 else 1  # 30 per epoch
-    if stride > 5 and len(x) / stride > 2:
+    if stride > 1:
         x_binned = np.array([x[i] for i in range(0, len(x), stride)][:-1])
         y_binned = np.stack([y[i:i + stride] for i in range(0, len(x), stride)][:-1])
         y_mean = np.mean(y_binned, axis=1)
@@ -60,6 +31,7 @@ def optionally_shaded(ax, x, y, *, color, label, **kwargs):
         ax.plot(x_binned, y_mean, color=color, label=label, **kwargs)
         ax.fill_between(x_binned, y_min, y_max, alpha=0.2, facecolor=color)
     else:
+        LOG.debug('not shading: entries = %d, epochs = %f', len(x), x[-1] - x[0])
         ax.plot(x, y, color=color, label=label, **kwargs)
 
 
@@ -195,6 +167,8 @@ class Plots():
         #     ax.set_yscale('log', nonposy='clip')
         ax.grid(linestyle='dotted')
         ax.legend(loc='upper right')
+        ax.text(0.01, 1.01, 'train (cross-dotted), val (dot-solid)',
+                transform=ax.transAxes, size='x-small')
 
     def epoch_head(self, ax, field_name):
         field_names = self.field_names()
@@ -234,26 +208,22 @@ class Plots():
         #     ax.set_yscale('log', nonposy='clip')
         ax.grid(linestyle='dotted')
         # ax.legend(loc='upper right')
+        ax.text(0.01, 1.01, 'train (cross-dotted), val (dot-solid)',
+                transform=ax.transAxes, size='x-small')
 
     def preprocess_time(self, ax):
         for color_i, (data, label) in enumerate(zip(self.datas, self.labels)):
             color = matplotlib.cm.get_cmap('tab10')((color_i % 10 + 0.05) / 10)
 
             if 'train' in data:
-                x = np.array([fractional_epoch(row) for row in data['train']])
+                # skip batch 0 as it has corrupted data_time
+                x = np.array([fractional_epoch(row)
+                              for row in data['train']
+                              if row.get('batch', 1) > 0])
                 y = np.array([row.get('data_time') / row.get('time') * 100.0
-                              for row in data['train']], dtype=np.float)
-                stride = int(len(x) / (x[-1] - x[0]) / 30.0)  # 30 per epoch
-                if stride > 5 and len(x) / stride > 2:
-                    x_binned = np.array([x[i] for i in range(0, len(x), stride)][:-1])
-                    y_binned = np.stack([y[i:i + stride] for i in range(0, len(x), stride)][:-1])
-                    y_mean = np.mean(y_binned, axis=1)
-                    y_min = np.min(y_binned, axis=1)
-                    y_max = np.max(y_binned, axis=1)
-                    ax.plot(x_binned, y_mean, color=color, label=label)
-                    ax.fill_between(x_binned, y_min, y_max, alpha=0.2, facecolor=color)
-                else:
-                    ax.plot(x, y, color=color, label=label)
+                              for row in data['train']
+                              if row.get('batch', 1) > 0], dtype=np.float)
+                optionally_shaded(ax, x, y, color=color, label=label)
 
         ax.set_xlabel('epoch')
         ax.set_ylabel('data preprocessing time [%]')
@@ -366,7 +336,7 @@ class Plots():
             self.lr(ax)
 
         with show.canvas(nrows=n_rows, ncols=n_cols, squeeze=False,
-                         figsize=multi_figsize, dpi=50,
+                         figsize=multi_figsize,
                          sharey=self.share_y, sharex=True) as axs:
             for row_i, row in enumerate(rows.values()):
                 for col_i, field_name in enumerate(row):
@@ -379,7 +349,7 @@ class Plots():
             self.preprocess_time(ax)
 
         with show.canvas(nrows=n_rows, ncols=n_cols, squeeze=False,
-                         figsize=multi_figsize, dpi=50,
+                         figsize=multi_figsize,
                          sharey=self.share_y, sharex=True) as axs:
             for row_i, row in enumerate(rows.values()):
                 for col_i, field_name in enumerate(row):
@@ -387,7 +357,7 @@ class Plots():
 
         if show_mtl_sigmas:
             with show.canvas(nrows=n_rows, ncols=n_cols, squeeze=False,
-                             figsize=multi_figsize, dpi=50,
+                             figsize=multi_figsize,
                              sharey=self.share_y, sharex=True) as axs:
                 for row_i, row in enumerate(rows.values()):
                     for col_i, field_name in enumerate(row):
@@ -443,7 +413,7 @@ class EvalPlots():
 
         def epoch_from_filename(filename):
             i = filename.find('epoch')
-            return int(filename[i+5:i+8])
+            return int(filename[i + 5:i + 8])
 
         def migrate(data):
             # earlier versions did not contain 'dataset'
@@ -561,7 +531,7 @@ class EvalPlots():
 
         # plot
         with show.canvas(nrows=nrows, ncols=ncols, figsize=(4 * ncols, 3 * nrows),
-                         sharex=True, sharey=self.share_y) as axs:
+                         sharex=True, sharey=self.share_y, squeeze=False) as axs:
             for ax_row, metric_row in zip(axs, all_rows):
                 for ax, (dataset, metric_name) in zip(ax_row, metric_row):
                     self.fill_metric(ax, dataset, metric_name)
@@ -576,11 +546,14 @@ class EvalPlots():
 def main():
     parser = argparse.ArgumentParser(
         prog='python3 -m openpifpaf.logs',
+        usage='%(prog)s [options] log_files',
         description=__doc__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument('--version', action='version',
                         version='OpenPifPaf {version}'.format(version=__version__))
+
+    show.cli(parser)
 
     parser.add_argument('log_file', nargs='+',
                         help='path to log file(s)')
@@ -597,6 +570,8 @@ def main():
                         help='output prefix (default is log_file + .)')
     parser.add_argument('--show-mtl-sigmas', default=False, action='store_true')
     args = parser.parse_args()
+
+    show.configure(args)
 
     if args.output is None:
         args.output = args.log_file[-1] + '.'

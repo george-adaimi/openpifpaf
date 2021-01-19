@@ -1,9 +1,10 @@
-import openpifpaf.contrib
+import openpifpaf
 
 
 def main():
-    openpifpaf.contrib.cifar10.datamodule.Cifar10().download_data()
-    openpifpaf.network.factory(checkpoint='shufflenetv2k16w')
+    openpifpaf.plugin.register()
+    openpifpaf.plugins.cifar10.datamodule.Cifar10().download_data()
+    openpifpaf.network.factory(checkpoint='shufflenetv2k16', download_progress=False)
 
 
 if __name__ == '__main__':

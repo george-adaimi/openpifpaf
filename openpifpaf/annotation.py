@@ -1,37 +1,46 @@
+import copy
+import math
 import numpy as np
 
 # pylint: disable=import-error
 from .functional import scalar_value_clipped
-
-NOTSET = '__notset__'
+from . import utils
 
 
 class Base:
-    pass
+    def inverse_transform(self, meta):
+        raise NotImplementedError
+
+    def json_data(self):
+        raise NotImplementedError
 
 
 class Annotation(Base):
-    def __init__(self, keypoints, skeleton, *,
-                 categories=None, suppress_score_index=None):
+    def __init__(self, keypoints, skeleton, sigmas=None, *,
+                 categories=None, score_weights=None, suppress_score_index=None):
         self.keypoints = keypoints
         self.skeleton = skeleton
+        self.sigmas = sigmas
         self.categories = categories
+        self.score_weights = score_weights
         self.suppress_score_index = suppress_score_index
 
         self.category_id = 1
         self.data = np.zeros((len(keypoints), 3), dtype=np.float32)
         self.joint_scales = np.zeros((len(keypoints),), dtype=np.float32)
-        self.fixed_score = NOTSET
-        self.fixed_bbox = NOTSET
+        self.fixed_score = None
+        self.fixed_bbox = None
         self.decoding_order = []
         self.frontier_order = []
 
         self.skeleton_m1 = (np.asarray(skeleton) - 1).tolist()
-
-        self.score_weights = np.ones((len(keypoints),))
+        if score_weights is None:
+            self.score_weights = np.ones((len(keypoints),))
+        else:
+            assert len(self.score_weights) == len(keypoints), "wrong number of scores"
+            self.score_weights = np.asarray(self.score_weights)
         if self.suppress_score_index:
-            self.score_weights[-1] = 0.0
-        self.score_weights[:3] = 3.0
+            self.score_weights[-len(self.suppress_score_index):] = 0.0
         self.score_weights /= np.sum(self.score_weights)
 
     @property
@@ -42,12 +51,15 @@ class Annotation(Base):
         self.data[joint_i] = xyv
         return self
 
-    def set(self, data, joint_scales=None, *, category_id=1, fixed_score=NOTSET, fixed_bbox=NOTSET):
+    def set(self, data, joint_scales=None, *, category_id=1, fixed_score=None, fixed_bbox=None):
         self.data = data
         if joint_scales is not None:
             self.joint_scales = joint_scales
         else:
             self.joint_scales[:] = 0.0
+            if self.sigmas is not None and fixed_bbox is not None:
+                area = fixed_bbox[2] * fixed_bbox[3]
+                self.joint_scales = np.sqrt(area) * np.asarray(self.sigmas)
         self.category_id = category_id
         self.fixed_score = fixed_score
         self.fixed_bbox = fixed_bbox
@@ -70,8 +82,9 @@ class Annotation(Base):
             scale = scalar_value_clipped(scales[xyv_i], xyv[0] * hr_scale, xyv[1] * hr_scale)
             self.joint_scales[xyv_i] = scale / hr_scale
 
+    @property
     def score(self):
-        if self.fixed_score != NOTSET:
+        if self.fixed_score is not None:
             return self.fixed_score
 
         v = self.data[:, 2]
@@ -106,7 +119,7 @@ class Annotation(Base):
         data = {
             'keypoints': keypoints.reshape(-1).tolist(),
             'bbox': [round(float(c), 2) for c in self.bbox()],
-            'score': max(0.001, round(self.score(), 3)),
+            'score': max(0.001, round(self.score, 3)),
             'category_id': self.category_id,
         }
 
@@ -117,7 +130,7 @@ class Annotation(Base):
         return data
 
     def bbox(self):
-        if self.fixed_bbox != NOTSET:
+        if self.fixed_bbox is not None:
             return self.fixed_bbox
         return self.bbox_from_keypoints(self.data, self.joint_scales)
 
@@ -132,6 +145,52 @@ class Annotation(Base):
         w = np.max(kps[:, 0][m] + joint_scales[m]) - x
         h = np.max(kps[:, 1][m] + joint_scales[m]) - y
         return [x, y, w, h]
+
+    def inverse_transform(self, meta):
+        assert self.fixed_bbox is None
+
+        ann = copy.deepcopy(self)
+
+        # determine rotation parameters
+        angle = -meta['rotation']['angle']
+        rw = meta['rotation']['width']
+        rh = meta['rotation']['height']
+        cangle = math.cos(angle / 180.0 * math.pi)
+        sangle = math.sin(angle / 180.0 * math.pi)
+
+        # rotation
+        if angle != 0.0:
+            xy = ann.data[:, :2]
+            x_old = xy[:, 0].copy() - (rw - 1) / 2
+            y_old = xy[:, 1].copy() - (rh - 1) / 2
+            xy[:, 0] = (rw - 1) / 2 + cangle * x_old + sangle * y_old
+            xy[:, 1] = (rh - 1) / 2 - sangle * x_old + cangle * y_old
+
+        # offset
+        ann.data[:, 0] += meta['offset'][0]
+        ann.data[:, 1] += meta['offset'][1]
+
+        # scale
+        ann.data[:, 0] = ann.data[:, 0] / meta['scale'][0]
+        ann.data[:, 1] = ann.data[:, 1] / meta['scale'][1]
+        ann.joint_scales /= meta['scale'][0]
+
+        assert not np.any(np.isnan(ann.data))
+
+        if meta['hflip']:
+            w = meta['width_height'][0]
+            ann.data[:, 0] = -ann.data[:, 0] + (w - 1)
+            if meta.get('horizontal_swap'):
+                ann.data[:] = meta['horizontal_swap'](ann.data)
+
+        for _, __, c1, c2 in ann.decoding_order:
+            c1[:2] += meta['offset']
+            c2[:2] += meta['offset']
+
+            c1[:2] /= meta['scale']
+            c2[:2] /= meta['scale']
+
+        return ann
 
 
 class AnnotationDet(Base):
@@ -160,6 +219,25 @@ class AnnotationDet(Base):
             'bbox': [round(float(c), 2) for c in self.bbox],
         }
 
+    def inverse_transform(self, meta):
+        ann = copy.deepcopy(self)
+
+        angle = -meta['rotation']['angle']
+        if angle != 0.0:
+            rw = meta['rotation']['width']
+            rh = meta['rotation']['height']
+            ann.bbox = utils.rotate_box(ann.bbox, rw - 1, rh - 1, angle)
+
+        ann.bbox[:2] += meta['offset']
+        ann.bbox[:2] /= meta['scale']
+        ann.bbox[2:] /= meta['scale']
+
+        if meta['hflip']:
+            w = meta['width_height'][0]
+            ann.bbox[0] = -(ann.bbox[0] + ann.bbox[2]) - 1.0 + w
+
+        return ann
+
 
 class AnnotationCrowd(Base):
     def __init__(self, categories):
@@ -183,3 +261,22 @@ class AnnotationCrowd(Base):
             'category': self.category,
             'bbox': [round(float(c), 2) for c in self.bbox],
         }
+
+    def inverse_transform(self, meta):
+        ann = copy.deepcopy(self)
+
+        angle = -meta['rotation']['angle']
+        if angle != 0.0:
+            rw = meta['rotation']['width']
+            rh = meta['rotation']['height']
+            ann.bbox = utils.rotate_box(ann.bbox, rw - 1, rh - 1, angle)
+
+        ann.bbox[:2] += meta['offset']
+        ann.bbox[:2] /= meta['scale']
+        ann.bbox[2:] /= meta['scale']
+
+        if meta['hflip']:
+            w = meta['width_height'][0]
+            ann.bbox[0] = -(ann.bbox[0] + ann.bbox[2]) - 1.0 + w
+
+        return ann

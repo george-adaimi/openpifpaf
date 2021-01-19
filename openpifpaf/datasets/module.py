@@ -16,7 +16,7 @@ class DataModule:
     """
 
     #: Data loader batch size.
-    batch_size = 8
+    batch_size = 1
 
     #: Data loader number of workers.
     loader_workers = 0
@@ -32,7 +32,7 @@ class DataModule:
 
     @classmethod
     def cli(cls, parser: argparse.ArgumentParser):
-        """Commond line interface (CLI) to extend argument parser."""
+        """Command line interface (CLI) to extend argument parser."""
 
     @classmethod
     def configure(cls, args: argparse.Namespace):
@@ -59,7 +59,7 @@ class DataModule:
         raise NotImplementedError
 
     def eval_loader(self) -> torch.utils.data.DataLoader:
-        """Loader of the evluation dataset.
+        """Loader of the evaluation dataset.
 
         For local runs, it is common that the validation dataset is also the
         evaluation dataset. This is then changed to test datasets (without
@@ -68,7 +68,7 @@ class DataModule:
 
         This loader shouldn't have any data augmentation. The images should be
         as close as possible to the real application.
-        The annotations should be the groud truth annotations similarly to
+        The annotations should be the ground truth annotations similarly to
         what the output of the decoder is expected to be.
         """
         raise NotImplementedError

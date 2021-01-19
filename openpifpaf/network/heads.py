@@ -5,7 +5,6 @@ import functools
 import logging
 import math
 
-import numpy as np
 import torch
 
 from .. import headmeta
@@ -15,10 +14,11 @@ LOG = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=16)
 def index_field_torch(shape, *, device=None, unsqueeze=(0, 0)):
-    yx = np.indices(shape, dtype=np.float32)
-    xy = np.flip(yx, axis=0)
+    assert len(shape) == 2
+    fliprow = torch.arange(shape[1]).repeat(shape[0], 1)
+    flipcol = torch.arange(shape[0]).repeat(shape[1], 1).t()
+    xy = torch.cat([fliprow.unsqueeze(0), flipcol.unsqueeze(0)])
 
-    xy = torch.from_numpy(xy.copy())
     if device is not None:
         xy = xy.to(device, non_blocking=True)
 
@@ -38,7 +38,6 @@ class PifHFlip(torch.nn.Module):
         ])
         LOG.debug('hflip indices: %s', flip_indices)
         self.register_buffer('flip_indices', flip_indices)
-
 
     def forward(self, *args):
         out = []
@@ -114,23 +113,11 @@ class HeadNetwork(torch.nn.Module):
 
     @classmethod
     def cli(cls, parser: argparse.ArgumentParser):
-        """Commond line interface (CLI) to extend argument parser."""
+        """Command line interface (CLI) to extend argument parser."""
 
     @classmethod
     def configure(cls, args: argparse.Namespace):
         """Take the parsed argument parser output and configure class variables."""
-
-
-class CafConcatenate(HeadNetwork):
-    def __init__(self, parents):
-        meta = headmeta.Caf.concatenate([p.meta for p in parents])
-        super().__init__(meta, parents[0].in_features)
-
-        self.parents = torch.nn.ModuleList(parents)
-
-    def forward(self, *args):
-        x = args[0]
-        return torch.cat([p(x) for p in self.parents], dim=1)
 
 
 class CompositeField3(HeadNetwork):
@@ -228,12 +215,12 @@ class CompositeField3(HeadNetwork):
             # scale
             first_scale_feature = self.meta.n_confidences + self.meta.n_vectors * 3
             scales_x = x[:, :, first_scale_feature:first_scale_feature + self.meta.n_scales]
-            torch.exp_(scales_x)
+            scales_x[:] = torch.nn.functional.softplus(scales_x)
         elif not self.training and not self.inplace_ops:
             # TODO: CoreMLv4 does not like strided slices.
             # Strides are avoided when switching the first and second dim
             # temporarily.
-            x = x.transpose(1, 2)
+            x = torch.transpose(x, 1, 2)
 
             # classification
             classes_x = x[:, 0:self.meta.n_confidences]
@@ -247,7 +234,7 @@ class CompositeField3(HeadNetwork):
             ]
             # regressions x: add index
             index_field = index_field_torch(x.shape[-2:], device=x.device, unsqueeze=(1, 0))
-            regs_x = [reg_x.add(index_field) if do_offset else reg_x
+            regs_x = [torch.add(reg_x, index_field) if do_offset else reg_x
                       for reg_x, do_offset in zip(regs_x, self.meta.vector_offsets)]
 
             # regressions logb
@@ -257,12 +244,12 @@ class CompositeField3(HeadNetwork):
             # scale
             first_scale_feature = self.meta.n_confidences + self.meta.n_vectors * 3
             scales_x = x[:, first_scale_feature:first_scale_feature + self.meta.n_scales]
-            scales_x = torch.exp(scales_x)
+            scales_x = torch.nn.functional.softplus(scales_x)
 
             # concat
             x = torch.cat([classes_x, *regs_x, regs_logb, scales_x], dim=1)
 
             # TODO: CoreMLv4 problem (see above).
-            x = x.transpose(1, 2)
+            x = torch.transpose(x, 1, 2)
 
         return x

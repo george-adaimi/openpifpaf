@@ -24,12 +24,14 @@ if COCOeval is not None:
     # However, after _prepare(), we need to add an 'area' to all ground
     # truth instances if not already present based on bbox.
     COCOeval._original_prepare = COCOeval._prepare  # pylint: disable=protected-access
+
     def new_prepare(instance):
         instance._original_prepare()  # pylint: disable=protected-access
         for gts in instance._gts.values():  # pylint: disable=protected-access
             for gt in gts:
                 if 'area' not in gt:
                     gt['area'] = gt['bbox'][2] * gt['bbox'][3]
+
     COCOeval._prepare = new_prepare  # pylint: disable=protected-access
 
 
@@ -134,7 +136,7 @@ class Coco(Base):
 
         self.predictions += image_annotations
 
-    def write_predictions(self, filename):
+    def write_predictions(self, filename, *, additional_data=None):
         predictions = [
             {k: v for k, v in annotation.items()
              if k in ('image_id', 'category_id', 'keypoints', 'score')}
@@ -146,6 +148,11 @@ class Coco(Base):
         with zipfile.ZipFile(filename + '.zip', 'w') as myzip:
             myzip.write(filename + '.pred.json', arcname='predictions.json')
         LOG.info('wrote %s.zip', filename)
+
+        if additional_data:
+            with open(filename + '.pred_meta.json', 'w') as f:
+                json.dump(additional_data, f)
+            LOG.info('wrote %s.pred_meta.json', filename)
 
     def stats(self):
         data = {

@@ -16,31 +16,28 @@ LOG = logging.getLogger(__name__)
 
 
 class Caf(Base):
-    show_margin = False
-    show_background = False
-    show_confidences = False
-    show_regressions = False
-
     def __init__(self, meta: headmeta.Caf):
         super().__init__(meta.name)
         self.meta = meta
-        self.keypoint_painter = show.KeypointPainter()
+        keypoint_painter = show.KeypointPainter(monocolor_connections=True)
+        self.annotation_painter = show.AnnotationPainter(painters={'Annotation': keypoint_painter})
 
     def targets(self, field, *, annotation_dicts):
         assert self.meta.keypoints is not None
-        skeleton = getattr(self.meta, 'skeleton', None)
-        if skeleton is None:
-            skeleton = getattr(self.meta, 'draw_skeleton', None)
-        assert skeleton is not None
+        assert self.meta.skeleton is not None
 
         annotations = [
-            Annotation(keypoints=self.meta.keypoints, skeleton=skeleton).set(
-                ann['keypoints'], fixed_score=None, fixed_bbox=ann['bbox'])
+            Annotation(
+                keypoints=self.meta.keypoints,
+                skeleton=self.meta.skeleton,
+                sigmas=self.meta.sigmas,
+            ).set(
+                ann['keypoints'], fixed_score='', fixed_bbox=ann['bbox'])
             for ann in annotation_dicts
         ]
 
         self._confidences(field[:, 0])
-        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 5], field[:, 6],
+        self._regressions(field[:, 1:3], field[:, 3:5], field[:, 7], field[:, 8],
                           annotations=annotations)
 
     def predicted(self, field):
@@ -51,10 +48,7 @@ class Caf(Base):
                           uv_is_offset=False)
 
     def _confidences(self, confidences):
-        if not self.show_confidences:
-            return
-
-        for f in self.indices:
+        for f in self.indices('confidence'):
             LOG.debug('%s,%s',
                       self.meta.keypoints[self.meta.skeleton[f][0] - 1],
                       self.meta.keypoints[self.meta.skeleton[f][1] - 1])
@@ -67,10 +61,7 @@ class Caf(Base):
     def _regressions(self, regression_fields1, regression_fields2,
                      scale_fields1, scale_fields2, *,
                      annotations=None, confidence_fields=None, uv_is_offset=True):
-        if not self.show_regressions:
-            return
-
-        for f in self.indices:
+        for f in self.indices('regression'):
             LOG.debug('%s,%s',
                       self.meta.keypoints[self.meta.skeleton[f][0] - 1],
                       self.meta.keypoints[self.meta.skeleton[f][1] - 1])
@@ -79,7 +70,7 @@ class Caf(Base):
             with self.image_canvas(self._processed_image, margin=[0.0, 0.01, 0.05, 0.01]) as ax:
                 show.white_screen(ax, alpha=0.5)
                 if annotations:
-                    self.keypoint_painter.annotations(ax, annotations, color='lightgray')
+                    self.annotation_painter.annotations(ax, annotations, color='lightgray')
                 q1 = show.quiver(ax,
                                  regression_fields1[f, :2],
                                  confidence_field=confidence_field,
@@ -100,8 +91,5 @@ class Caf(Base):
                            regression_field=regression_fields2[f, :2],
                            xy_scale=self.meta.stride, cmap='Greens', fill=False,
                            regression_field_is_offset=uv_is_offset)
-                if self.show_margin:
-                    show.margins(ax, regression_fields1[f, :6], xy_scale=self.meta.stride)
-                    show.margins(ax, regression_fields2[f, :6], xy_scale=self.meta.stride)
 
                 self.colorbar(ax, q1)

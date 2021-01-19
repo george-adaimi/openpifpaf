@@ -5,38 +5,24 @@ import openpifpaf
 
 
 def test_forward():
-    openpifpaf.datasets.CocoKp.upsample_stride = 1
+    openpifpaf.plugin.register()
+    openpifpaf.plugins.coco.CocoKp.upsample_stride = 1
     datamodule = openpifpaf.datasets.factory('cocokp')
     openpifpaf.network.basenetworks.Resnet.pretrained = False
     model, _ = openpifpaf.network.factory(
         base_name='resnet18',
         head_metas=datamodule.head_metas,
-    )
-
-    dummy_image_batch = torch.zeros((1, 3, 241, 321))
-    cif, caf, _ = model(dummy_image_batch)
-    assert cif.shape == (1, 17, 5, 16, 21)
-    assert caf.shape == (1, 19, 9, 16, 21)
-
-
-def test_forward_dense():
-    openpifpaf.datasets.CocoKp.upsample_stride = 1
-    datamodule = openpifpaf.datasets.factory('cocokp')
-    openpifpaf.network.basenetworks.Resnet.pretrained = False
-    model, _ = openpifpaf.network.factory(
-        base_name='resnet18',
-        head_metas=datamodule.head_metas,
-        dense_coupling=1.0,
     )
 
     dummy_image_batch = torch.zeros((1, 3, 241, 321))
     cif, caf = model(dummy_image_batch)
     assert cif.shape == (1, 17, 5, 16, 21)
-    assert caf.shape == (1, 19 + 25, 9, 16, 21)
+    assert caf.shape == (1, 19, 9, 16, 21)
 
 
-def test_forward_headquad():
-    openpifpaf.datasets.CocoKp.upsample_stride = 2
+def test_forward_upsample():
+    openpifpaf.plugin.register()
+    openpifpaf.plugins.coco.CocoKp.upsample_stride = 2
     datamodule = openpifpaf.datasets.factory('cocokp')
     openpifpaf.network.basenetworks.Resnet.pretrained = False
     model, _ = openpifpaf.network.factory(
@@ -45,13 +31,14 @@ def test_forward_headquad():
     )
 
     dummy_image_batch = torch.zeros((1, 3, 241, 321))
-    cif, caf, _ = model(dummy_image_batch)
+    cif, caf = model(dummy_image_batch)
     assert cif.shape == (1, 17, 5, 31, 41)
     assert caf.shape == (1, 19, 9, 31, 41)
 
 
 def test_forward_noinplace():
-    openpifpaf.datasets.CocoKp.upsample_stride = 2
+    openpifpaf.plugin.register()
+    openpifpaf.plugins.coco.CocoKp.upsample_stride = 2
     datamodule = openpifpaf.datasets.factory('cocokp')
     openpifpaf.network.basenetworks.Resnet.pretrained = False
     model, _ = openpifpaf.network.factory(
@@ -63,10 +50,10 @@ def test_forward_noinplace():
 
     with torch.no_grad():
         openpifpaf.network.heads.CompositeField3.inplace_ops = True
-        ref_cif, ref_caf, _ = model(dummy_image_batch)
+        ref_cif, ref_caf = model(dummy_image_batch)
 
         openpifpaf.network.heads.CompositeField3.inplace_ops = False
-        cif, caf, _ = model(dummy_image_batch)
+        cif, caf = model(dummy_image_batch)
 
     np.testing.assert_allclose(ref_cif.numpy(), cif.numpy())
     np.testing.assert_allclose(ref_caf.numpy(), caf.numpy())

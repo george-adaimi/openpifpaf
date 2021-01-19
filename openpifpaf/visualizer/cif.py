@@ -16,28 +16,29 @@ LOG = logging.getLogger(__name__)
 
 
 class Cif(Base):
-    show_margin = False
-    show_confidences = False
-    show_regressions = False
-    show_background = False
-
     def __init__(self, meta: headmeta.Cif):
         super().__init__(meta.name)
         self.meta = meta
-        self.annotation_painter = show.AnnotationPainter()
+        keypoint_painter = show.KeypointPainter(monocolor_connections=True)
+        self.annotation_painter = show.AnnotationPainter(painters={'Annotation': keypoint_painter})
 
     def targets(self, field, *, annotation_dicts):
         assert self.meta.keypoints is not None
         assert self.meta.draw_skeleton is not None
 
         annotations = [
-            Annotation(keypoints=self.meta.keypoints, skeleton=self.meta.draw_skeleton).set(
-                ann['keypoints'], fixed_score=None, fixed_bbox=ann['bbox'])
+            Annotation(
+                keypoints=self.meta.keypoints,
+                skeleton=self.meta.draw_skeleton,
+                sigmas=self.meta.sigmas,
+                score_weights=self.meta.score_weights
+            ).set(
+                ann['keypoints'], fixed_score='', fixed_bbox=ann['bbox'])
             for ann in annotation_dicts
         ]
 
         self._confidences(field[:, 0])
-        self._regressions(field[:, 1:3], field[:, 3], annotations=annotations)
+        self._regressions(field[:, 1:3], field[:, 4], annotations=annotations)
 
     def predicted(self, field):
         self._confidences(field[:, 0])
@@ -47,10 +48,7 @@ class Cif(Base):
                           uv_is_offset=False)
 
     def _confidences(self, confidences):
-        if not self.show_confidences:
-            return
-
-        for f in self.indices:
+        for f in self.indices('confidence'):
             LOG.debug('%s', self.meta.keypoints[f])
 
             with self.image_canvas(self._processed_image, margin=[0.0, 0.01, 0.05, 0.01]) as ax:
@@ -60,10 +58,7 @@ class Cif(Base):
 
     def _regressions(self, regression_fields, scale_fields, *,
                      annotations=None, confidence_fields=None, uv_is_offset=True):
-        if not self.show_regressions:
-            return
-
-        for f in self.indices:
+        for f in self.indices('regression'):
             LOG.debug('%s', self.meta.keypoints[f])
             confidence_field = confidence_fields[f] if confidence_fields is not None else None
 
@@ -81,7 +76,7 @@ class Cif(Base):
                            regression_field=regression_fields[f, :2],
                            xy_scale=self.meta.stride, cmap='Oranges', fill=False,
                            regression_field_is_offset=uv_is_offset)
-                if self.show_margin:
+                if f in self.indices('margin', with_all=False):
                     show.margins(ax, regression_fields[f, :6], xy_scale=self.meta.stride)
 
                 self.colorbar(ax, q)
