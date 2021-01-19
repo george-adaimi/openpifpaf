@@ -15,10 +15,11 @@ LOG = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=16)
 def index_field_torch(shape, *, device=None, unsqueeze=(0, 0)):
-    yx = np.indices(shape, dtype=np.float32)
-    xy = np.flip(yx, axis=0)
-
-    xy = torch.from_numpy(xy.copy())
+    y = torch.arange(shape[0]).view(shape[0], 1).repeat(1,shape[1]).unsqueeze(0)
+    x = torch.transpose(torch.arange(shape[1]).view(shape[1], 1).repeat(1,shape[0]), 0, 1).unsqueeze(0)
+    #yx = np.indices(shape, dtype=np.int32)
+    #xy = np.flip(yx, axis=0)
+    xy = torch.cat((x,y), dim=0).clone()
     if device is not None:
         xy = xy.to(device, non_blocking=True)
 

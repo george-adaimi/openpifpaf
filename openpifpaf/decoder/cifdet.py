@@ -55,7 +55,8 @@ class CifDet(Decoder):
 
         self.occupancy_visualizer.predicted(occupied)
 
-        annotations = utils.nms.Detection().annotations(annotations)
+        annotations = utils.nms.Detection().annotations_per_category(annotations, nms_type='snms')
+        #annotations = utils.nms.Detection().annotations(annotations)
         # annotations = sorted(annotations, key=lambda a: -a.score)
 
         LOG.info('annotations %d, decoder = %.3fs', len(annotations), time.perf_counter() - start)

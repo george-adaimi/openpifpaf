@@ -1,12 +1,11 @@
 import argparse
 
 import torch
-import numpy as np
 
 from openpifpaf.datasets.module import DataModule
 from openpifpaf import encoder, metric, transforms
-from .. import headmeta
-from .coco import Coco
+from . import headmeta
+from openpifpaf.datasets.coco import Coco
 from openpifpaf.datasets.cocokp import CocoKp
 from openpifpaf.datasets.collate import collate_images_anns_meta, collate_images_targets_meta
 from openpifpaf.datasets.constants import (
@@ -14,7 +13,6 @@ from openpifpaf.datasets.constants import (
     COCO_KEYPOINTS,
     HFLIP,
 )
-from ..visual_relationship.constants import OBJ_CATEGORIES
 
 try:
     import pycocotools.coco
@@ -45,56 +43,46 @@ class CocoDet(DataModule):
 
     def __init__(self):
         super().__init__()
-        self.chosen_category = []
-        for categ in OBJ_CATEGORIES:
-            try:
-                ind = COCO_CATEGORIES.index(categ)
-                self.chosen_category.append(ind+1)
-            except:
-                pass
-
-        self.chosen_category = np.asarray(self.chosen_category)
-        #cifdet = headmeta.CifDet('cifdet', 'cocodet_raf', np.asarray(COCO_CATEGORIES)[self.chosen_category-1])
-        cifdet = headmeta.CifDet_deep('cifdet_deep', 'cocodet_raf', np.asarray(COCO_CATEGORIES)[self.chosen_category-1])
+        cifdet = headmeta.CifDet_deep('cifdet', 'cocodet_deep', COCO_CATEGORIES)
         cifdet.upsample_stride = self.upsample_stride
         self.head_metas = [cifdet]
 
     @classmethod
     def cli(cls, parser: argparse.ArgumentParser):
-        group = parser.add_argument_group('data module CocoDet')
+        group = parser.add_argument_group('data module CocoDet Deep')
 
-        group.add_argument('--cocodet-raf-train-annotations',
+        group.add_argument('--cocodet-deep-train-annotations',
                            default=cls.train_annotations)
-        group.add_argument('--cocodet-raf-val-annotations',
+        group.add_argument('--cocodet-deep-val-annotations',
                            default=cls.val_annotations)
-        group.add_argument('--cocodet-raf-train-image-dir',
+        group.add_argument('--cocodet-deep-train-image-dir',
                            default=cls.train_image_dir)
-        group.add_argument('--cocodet-raf-val-image-dir',
+        group.add_argument('--cocodet-deep-val-image-dir',
                            default=cls.val_image_dir)
 
-        group.add_argument('--cocodet-raf-square-edge',
+        group.add_argument('--cocodet-deep-square-edge',
                            default=cls.square_edge, type=int,
                            help='square edge of input images')
         assert not cls.extended_scale
-        group.add_argument('--cocodet-raf-extended-scale',
+        group.add_argument('--cocodet-deep-extended-scale',
                            default=False, action='store_true',
                            help='augment with an extended scale range')
-        group.add_argument('--cocodet-raf-orientation-invariant',
+        group.add_argument('--cocodet-deep-orientation-invariant',
                            default=cls.orientation_invariant, type=float,
                            help='augment with random orientations')
-        group.add_argument('--cocodet-raf-blur',
+        group.add_argument('--cocodet_deep-blur',
                            default=cls.blur, type=float,
                            help='augment with blur')
         assert cls.augmentation
-        group.add_argument('--cocodet-raf-no-augmentation',
-                           dest='cocodet_augmentation',
+        group.add_argument('--cocodet-deep-no-augmentation',
+                           dest='cocodet_deep_augmentation',
                            default=True, action='store_false',
                            help='do not apply data augmentation')
-        group.add_argument('--cocodet-raf-rescale-images',
+        group.add_argument('--cocodet-deep-rescale-images',
                            default=cls.rescale_images, type=float,
                            help='overall rescale factor for images')
 
-        group.add_argument('--cocodet-raf-upsample',
+        group.add_argument('--cocodet-deep-upsample',
                            default=cls.upsample_stride, type=int,
                            help='head upsample stride')
 
@@ -105,18 +93,18 @@ class CocoDet(DataModule):
         cls.pin_memory = args.pin_memory
 
         # cocodet specific
-        cls.train_annotations = args.cocodet_train_annotations
-        cls.val_annotations = args.cocodet_val_annotations
-        cls.train_image_dir = args.cocodet_train_image_dir
-        cls.val_image_dir = args.cocodet_val_image_dir
+        cls.train_annotations = args.cocodet_deep_train_annotations
+        cls.val_annotations = args.cocodet_deep_val_annotations
+        cls.train_image_dir = args.cocodet_deep_train_image_dir
+        cls.val_image_dir = args.cocodet_deep_val_image_dir
 
-        cls.square_edge = args.cocodet_square_edge
-        cls.extended_scale = args.cocodet_extended_scale
-        cls.orientation_invariant = args.cocodet_orientation_invariant
-        cls.blur = args.cocodet_blur
-        cls.augmentation = args.cocodet_augmentation
-        cls.rescale_images = args.cocodet_rescale_images
-        cls.upsample_stride = args.cocodet_upsample
+        cls.square_edge = args.cocodet_deep_square_edge
+        cls.extended_scale = args.cocodet_deep_extended_scale
+        cls.orientation_invariant = args.cocodet_deep_orientation_invariant
+        cls.blur = args.cocodet_deep_blur
+        cls.augmentation = args.cocodet_deep_augmentation
+        cls.rescale_images = args.cocodet_deep_rescale_images
+        cls.upsample_stride = args.cocodet_deep_upsample
 
         cls.eval_annotation_filter = args.coco_eval_annotation_filter
 
@@ -163,7 +151,7 @@ class CocoDet(DataModule):
             ann_file=self.train_annotations,
             preprocess=self._preprocess(),
             annotation_filter=True,
-            category_ids=self.chosen_category,
+            category_ids=[],
         )
         return torch.utils.data.DataLoader(
             train_data, batch_size=self.batch_size, shuffle=not self.debug and self.augmentation,
@@ -176,7 +164,7 @@ class CocoDet(DataModule):
             ann_file=self.val_annotations,
             preprocess=self._preprocess(),
             annotation_filter=True,
-            category_ids=self.chosen_category,
+            category_ids=[],
         )
         return torch.utils.data.DataLoader(
             val_data, batch_size=self.batch_size, shuffle=False,
@@ -200,7 +188,7 @@ class CocoDet(DataModule):
             ann_file=self.eval_annotations,
             preprocess=self._eval_preprocess(),
             annotation_filter=self.eval_annotation_filter,
-            category_ids=self.chosen_category,
+            category_ids=[],
         )
         return torch.utils.data.DataLoader(
             eval_data, batch_size=self.batch_size, shuffle=False,

@@ -56,10 +56,9 @@ def apply(model, outfile, verbose=True, input_w=129, input_h=97):
     openpifpaf.network.heads.CompositeField3.inplace_ops = False
 
     dummy_input = torch.randn(1, 3, input_h, input_w)
-
     torch.onnx.export(
         model, dummy_input, outfile, verbose=verbose,
-        input_names=['input_batch'], output_names=['cif', 'caf'],
+        input_names=['input_batch'], output_names=['cifdet'],
         # keep_initializers_as_inputs=True,
         # opset_version=10,
         do_constant_folding=True,

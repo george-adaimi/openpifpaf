@@ -4,9 +4,10 @@ import numpy as np
 import zipfile
 from tqdm import tqdm
 from PIL import Image
+import json
 
 from openpifpaf.metric.base import Base
-#from visdroneval.utils import calcAccuracy, dropObjectsInIgr
+from visdroneval.utils import calcAccuracy, dropObjectsInIgr
 
 LOG = logging.getLogger(__name__)
 

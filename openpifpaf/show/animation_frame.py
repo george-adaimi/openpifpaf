@@ -2,6 +2,7 @@ import logging
 
 try:
     import matplotlib
+    matplotlib.use('Agg')
     import matplotlib.animation
     import matplotlib.collections
     import matplotlib.pyplot as plt

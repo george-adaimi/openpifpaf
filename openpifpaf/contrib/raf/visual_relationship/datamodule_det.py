@@ -5,19 +5,19 @@ import torchvision
 
 import openpifpaf
 
-from .visdrone import VisDrone
-from .constants import BBOX_KEYPOINTS, BBOX_HFLIP
+from .visual_relationship import VisualRelationship
+from .constants import BBOX_KEYPOINTS, BBOX_HFLIP, OBJ_CATEGORIES, REL_CATEGORIES, REL_CATEGORIES_FLIP
 from . import metric
-from ..butterflydet.fullbutterfly import FullButterfly
+from .. import headmeta
+from ..raf import Raf
 
-class VisDroneModule(openpifpaf.datasets.DataModule):
-    train_image_dir = "data/VisDrone2019/VisDrone2019-DET-train/images"
-    val_image_dir = "data/VisDrone2019/VisDrone2019-DET-val/images"
+class VisualRelationshipDetModule(openpifpaf.datasets.DataModule):
+    train_image_dir = "data/visual_relationship/sg_dataset/sg_train_images"
+    val_image_dir = "data/visual_relationship/sg_dataset/sg_test_images"
     eval_image_dir = val_image_dir
-    train_annotations = "data/VisDrone2019/VisDrone2019-DET-train/annotations"
-    val_annotations = "data/VisDrone2019/VisDrone2019-DET-val/annotations"
+    train_annotations = "data/visual_relationship/annotations_train.json"
+    val_annotations = "data/visual_relationship/annotations_test.json"
     eval_annotations = val_annotations
-    test_path = {'val': "data/VisDrone2019/VisDrone2019-DET-val/", 'test-dev': "data/VisDrone2019/VisDrone2019-DET-test-dev/", 'test-challenge': "data/VisDrone2019/VisDrone2019-DET-test-challenge/"}
     debug = False
     pin_memory = False
 
@@ -28,66 +28,75 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
     augmentation = True
     rescale_images = 1.0
     upsample_stride = 1
+    special_preprocess = False
     max_long_edge = False
+    no_flipping = False
+    blur = 0.0
 
     eval_long_edge = None
     eval_orientation_invariant = 0.0
     eval_extended_scale = False
-    categories = ("pedestrian", "people", "bicycle", "car", "van", "truck", "tricycle", "awning-tricycle", "bus", "motor")
-    full_butterfly = False
+    obj_categories = OBJ_CATEGORIES
+    rel_categories = REL_CATEGORIES
     def __init__(self):
         super().__init__()
 
-        cifdet = openpifpaf.headmeta.CifDet('cifdet', 'visdrone', self.categories)
+        # raf = headmeta.Raf('raf', 'visual_relationship', self.obj_categories, self.rel_categories)
+        # raf.upsample_stride = self.upsample_stride
+        #cifdet = openpifpaf.headmeta.CifDet('cifdet', 'visual_relationship', self.obj_categories)
+        cifdet = headmeta.CifDet_deep('cifdet_deep', 'visual_relationship_det', self.obj_categories)
         cifdet.upsample_stride = self.upsample_stride
         self.head_metas = [cifdet,]
 
 
     @classmethod
     def cli(cls, parser: argparse.ArgumentParser):
-        group = parser.add_argument_group('data module VisDrone2019')
+        group = parser.add_argument_group('data module Visual Relationship')
 
-        group.add_argument('--visdrone-train-annotations',
+        group.add_argument('--visual-relationship-det-train-annotations',
                            default=cls.train_annotations)
-        group.add_argument('--visdrone-val-annotations',
+        group.add_argument('--visual-relationship-det-val-annotations',
                            default=cls.val_annotations)
-        group.add_argument('--visdrone-train-image-dir',
+        group.add_argument('--visual-relationship-det-train-image-dir',
                            default=cls.train_image_dir)
-        group.add_argument('--visdrone-val-image-dir',
+        group.add_argument('--visual-relationship-det-val-image-dir',
                            default=cls.val_image_dir)
 
-        group.add_argument('--visdrone-n-images',
+        group.add_argument('--visual-relationship-det-n-images',
                            default=cls.n_images, type=int,
                            help='number of images to sample')
-        group.add_argument('--visdrone-square-edge',
+        group.add_argument('--visual-relationship-det-square-edge',
                            default=cls.square_edge, type=int,
                            help='square edge of input images')
-        parser.add_argument('--visdrone-split', choices=('val', 'test', 'test-dev'), default='val',
-                            help='dataset to evaluate')
         assert not cls.extended_scale
-        group.add_argument('--visdrone-extended-scale',
+        group.add_argument('--visual-relationship-det-extended-scale',
                            default=False, action='store_true',
                            help='augment with an extended scale range')
-        group.add_argument('--visdrone-orientation-invariant',
+        group.add_argument('--visual-relationship-det-orientation-invariant',
                            default=cls.orientation_invariant, type=float,
                            help='augment with random orientations')
         assert cls.augmentation
-        group.add_argument('--visdrone-no-augmentation',
-                           dest='visdrone_augmentation',
+        group.add_argument('--visual-relationship-det-no-augmentation',
+                           dest='visual_relationship_det_augmentation',
                            default=True, action='store_false',
                            help='do not apply data augmentation')
-        group.add_argument('--visdrone-rescale-images',
+        group.add_argument('--visual-relationship-det-rescale-images',
                            default=cls.rescale_images, type=float,
                            help='overall rescale factor for images')
 
-        group.add_argument('--visdrone-upsample',
+        group.add_argument('--visual-relationship-det-upsample',
                            default=cls.upsample_stride, type=int,
                            help='head upsample stride')
-        group.add_argument('--visdrone-full-butterfly',
+        group.add_argument('--visual-relationship-det-special-preprocess',
+                           dest='visual_relationship_det_special_preprocess',
                            default=False, action='store_true',
-                           help='use full butterfly')
-        group.add_argument('--visdrone-max-long-edge',
-                           dest='visdrone_max_long_edge',
+                           help='do not apply data augmentation')
+        group.add_argument('--visual-relationship-det-max-long-edge',
+                           dest='visual_relationship_det_max_long_edge',
+                           default=False, action='store_true',
+                           help='do not apply data augmentation')
+        group.add_argument('--visual-relationship-det-no-flipping',
+                           dest='visual_relationship_det_no_flipping',
                            default=False, action='store_true',
                            help='do not apply data augmentation')
 
@@ -97,24 +106,23 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
         cls.debug = args.debug
         cls.pin_memory = args.pin_memory
 
-        # visdrone specific
-        cls.train_annotations = args.visdrone_train_annotations
-        cls.val_annotations = args.visdrone_val_annotations
-        cls.train_image_dir = args.visdrone_train_image_dir
-        cls.val_image_dir = args.visdrone_val_image_dir
-
-        cls.eval_image_dir = cls.test_path[args.visdrone_split] + "images"
-        cls.eval_annotations = cls.test_path[args.visdrone_split] + "annotations"
-
-        cls.n_images = args.visdrone_n_images
-        cls.square_edge = args.visdrone_square_edge
-        cls.extended_scale = args.visdrone_extended_scale
-        cls.orientation_invariant = args.visdrone_orientation_invariant
-        cls.augmentation = args.visdrone_augmentation
-        cls.rescale_images = args.visdrone_rescale_images
-        cls.upsample_stride = args.visdrone_upsample
-        cls.full_butterfly = args.visdrone_full_butterfly
-        cls.max_long_edge = args.visdrone_max_long_edge
+        # visual relationship specific
+        cls.train_annotations = args.visual_relationship_det_train_annotations
+        cls.val_annotations = args.visual_relationship_det_val_annotations
+        cls.train_image_dir = args.visual_relationship_det_train_image_dir
+        cls.val_image_dir = args.visual_relationship_det_val_image_dir
+        cls.eval_image_dir = cls.val_image_dir #cls.val_image_dir
+        cls.eval_annotations = cls.val_annotations #cls.val_annotations
+        cls.n_images = args.visual_relationship_det_n_images
+        cls.square_edge = args.visual_relationship_det_square_edge
+        cls.extended_scale = args.visual_relationship_det_extended_scale
+        cls.orientation_invariant = args.visual_relationship_det_orientation_invariant
+        cls.augmentation = args.visual_relationship_det_augmentation
+        cls.rescale_images = args.visual_relationship_det_rescale_images
+        cls.upsample_stride = args.visual_relationship_det_upsample
+        cls.special_preprocess = args.visual_relationship_det_special_preprocess
+        cls.max_long_edge = args.visual_relationship_det_max_long_edge
+        cls.no_flipping = args.visual_relationship_det_no_flipping
 
     @staticmethod
     def _convert_data(parent_data, meta):
@@ -128,10 +136,7 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
         return image, anns, meta
 
     def _preprocess(self):
-        if self.full_butterfly:
-            enc = FullButterfly(self.head_metas[0])
-        else:
-            enc = openpifpaf.encoder.CifDet(self.head_metas[0])
+        encoders = (openpifpaf.encoder.CifDet(self.head_metas[0]),)
 
         if not self.augmentation:
             return openpifpaf.transforms.Compose([
@@ -139,7 +144,7 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
                 openpifpaf.transforms.RescaleAbsolute(self.square_edge),
                 openpifpaf.transforms.CenterPad(self.square_edge),
                 openpifpaf.transforms.EVAL_TRANSFORM,
-                openpifpaf.transforms.Encoders([enc]),
+                openpifpaf.transforms.Encoders(encoders),
             ])
 
         if self.extended_scale:
@@ -157,6 +162,42 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
         if self.orientation_invariant:
             orientation_t = openpifpaf.transforms.RandomApply(
                 openpifpaf.transforms.RotateBy90(), self.orientation_invariant)
+
+        if self.special_preprocess:
+            return openpifpaf.transforms.Compose([
+                openpifpaf.transforms.NormalizeAnnotations(),
+                openpifpaf.transforms.RandomApply(openpifpaf.transforms.HFlip(BBOX_KEYPOINTS, BBOX_HFLIP), 0.5),
+                #rescale_t,
+                openpifpaf.transforms.RescaleRelative(scale_range=(0.8 * self.rescale_images,
+                             1.3* self.rescale_images), absolute_reference=self.square_edge),
+                openpifpaf.transforms.Crop(self.square_edge, use_area_of_interest=True),
+                openpifpaf.transforms.CenterPad(self.square_edge),
+                orientation_t,
+                #openpifpaf.transforms.MinSize(min_side=4.0),
+                openpifpaf.transforms.UnclippedArea(threshold=0.8),
+                # transforms.UnclippedSides(),
+                openpifpaf.transforms.TRAIN_TRANSFORM,
+                openpifpaf.transforms.Encoders(encoders),
+            ])
+
+        if self.no_flipping:
+            return openpifpaf.transforms.Compose([
+                openpifpaf.transforms.NormalizeAnnotations(),
+                #rescale_t,
+                #openpifpaf.transforms.RescaleRelative(scale_range=(0.7 * self.rescale_images,
+                #             1.5* self.rescale_images), absolute_reference=self.square_edge),
+                openpifpaf.transforms.RescaleRelative(scale_range=(0.7 * self.rescale_images,
+                             1.5* self.rescale_images)),
+                openpifpaf.transforms.Crop(self.square_edge, use_area_of_interest=True),
+                openpifpaf.transforms.CenterPad(self.square_edge),
+                #orientation_t,
+                openpifpaf.transforms.MinSize(min_side=4.0),
+                openpifpaf.transforms.UnclippedArea(threshold=0.75),
+                # transforms.UnclippedSides(),
+                openpifpaf.transforms.TRAIN_TRANSFORM,
+                openpifpaf.transforms.Encoders(encoders),
+            ])
+
         if self.max_long_edge:
             return openpifpaf.transforms.Compose([
                 openpifpaf.transforms.NormalizeAnnotations(),
@@ -171,35 +212,41 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
                 openpifpaf.transforms.TRAIN_TRANSFORM,
                 openpifpaf.transforms.Encoders(encoders),
             ])
+
         return openpifpaf.transforms.Compose([
             openpifpaf.transforms.NormalizeAnnotations(),
             openpifpaf.transforms.AnnotationJitter(),
+            #openpifpaf.transforms.RandomApply(openpifpaf.transforms.HFlip(BBOX_KEYPOINTS, BBOX_HFLIP), 0.5),
             openpifpaf.transforms.RandomApply(openpifpaf.transforms.HFlip(BBOX_KEYPOINTS, BBOX_HFLIP), 0.5),
             rescale_t,
+            openpifpaf.transforms.RandomApply(openpifpaf.transforms.Blur(), self.blur),
             openpifpaf.transforms.Crop(self.square_edge, use_area_of_interest=True),
             openpifpaf.transforms.CenterPad(self.square_edge),
             orientation_t,
-            openpifpaf.transforms.MinSize(min_side=4.0),
+            #openpifpaf.transforms.MinSize(min_side=4.0),
             openpifpaf.transforms.UnclippedArea(threshold=0.75),
             # transforms.UnclippedSides(),
             openpifpaf.transforms.TRAIN_TRANSFORM,
-            openpifpaf.transforms.Encoders([enc]),
+            openpifpaf.transforms.Encoders(encoders),
         ])
 
     def train_loader(self):
-        train_data = VisDrone(
+        train_data = VisualRelationship(
             image_dir=self.train_image_dir,
             ann_file=self.train_annotations,
             preprocess=self._preprocess(),
             n_images=self.n_images,
         )
+
+        #self.head_metas[1].fg_matrix, self.head_metas[1].bg_matrix, self.head_metas[1].smoothing_pred = train_data.get_frequency_prior(self.obj_categories, self.rel_categories)
+
         return torch.utils.data.DataLoader(
-            train_data, batch_size=self.batch_size, shuffle=not self.debug,
+            train_data, batch_size=self.batch_size, shuffle=not self.debug and self.augmentation,
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=True,
             collate_fn=openpifpaf.datasets.collate_images_targets_meta)
 
     def val_loader(self):
-        val_data = VisDrone(
+        val_data = VisualRelationship(
             image_dir=self.val_image_dir,
             ann_file=self.val_annotations,
             preprocess=self._preprocess(),
@@ -223,8 +270,8 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
             rescale_t = openpifpaf.transforms.RescaleAbsolute(self.eval_long_edge)
         padding_t = None
         if self.batch_size == 1:
-            #padding_t = openpifpaf.transforms.CenterPadTight(16)
-            padding_t = openpifpaf.transforms.CenterPadTight(32)
+            padding_t = openpifpaf.transforms.CenterPadTight(16)
+            #padding_t = openpifpaf.transforms.CenterPadTight(32)
         else:
             assert self.eval_long_edge
             padding_t = openpifpaf.transforms.CenterPad(self.eval_long_edge)
@@ -244,14 +291,26 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
             padding_t,
             orientation_t,
             openpifpaf.transforms.ToAnnotations([
-                openpifpaf.transforms.ToDetAnnotations(self.categories),
-                openpifpaf.transforms.ToCrowdAnnotations(self.categories),
+                openpifpaf.transforms.ToDetAnnotations(self.obj_categories),
+                openpifpaf.transforms.ToCrowdAnnotations(self.obj_categories),
             ]),
             openpifpaf.transforms.EVAL_TRANSFORM,
         ])
 
+    def _get_fg_matrix(self):
+        # train_data = VisualRelationship(
+        #     image_dir=self.train_image_dir,
+        #     ann_file=self.train_annotations
+        # )
+        train_data = VisualRelationship(
+            image_dir=self.train_image_dir,
+            ann_file=self.train_annotations
+        )
+
+        #self.head_metas[1].fg_matrix, self.head_metas[1].bg_matrix, self.head_metas[1].smoothing_pred = train_data.get_frequency_prior(self.obj_categories, self.rel_categories)
+
     def eval_loader(self):
-        eval_data = VisDrone(
+        eval_data = VisualRelationship(
             image_dir=self.eval_image_dir,
             ann_file=self.eval_annotations,
             preprocess=self._eval_preprocess(),
@@ -259,13 +318,11 @@ class VisDroneModule(openpifpaf.datasets.DataModule):
             category_ids=[],
         )
 
+
         return torch.utils.data.DataLoader(
             eval_data, batch_size=self.batch_size, shuffle=False,
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=False,
             collate_fn=openpifpaf.datasets.collate_images_anns_meta)
 
     def metrics(self):
-        return [metric.VisDrone(
-            self.eval_annotations,
-            self.eval_image_dir,
-        )]
+        return [metric.VRD()]
