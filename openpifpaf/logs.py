@@ -224,17 +224,7 @@ class Plots():
                 y = np.array([row.get('data_time') / row.get('time') * 100.0
                               for row in data['train']
                               if row.get('batch', 1) > 0], dtype=np.float)
-                stride = int(len(x) / (x[-1] - x[0]) / 30.0)  # 30 per epoch
-                if stride > 5 and len(x) / stride > 2:
-                    x_binned = np.array([x[i] for i in range(0, len(x), stride)][:-1])
-                    y_binned = np.stack([y[i:i + stride] for i in range(0, len(x), stride)][:-1])
-                    y_mean = np.mean(y_binned, axis=1)
-                    y_min = np.min(y_binned, axis=1)
-                    y_max = np.max(y_binned, axis=1)
-                    ax.plot(x_binned, y_mean, color=color, label=label)
-                    ax.fill_between(x_binned, y_min, y_max, alpha=0.2, facecolor=color)
-                else:
-                    ax.plot(x, y, color=color, label=label)
+                optionally_shaded(ax, x, y, color=color, label=label)
 
         ax.set_xlabel('epoch')
         ax.set_ylabel('data preprocessing time [%]')
@@ -544,7 +534,7 @@ class EvalPlots():
 
         # plot
         with show.canvas(nrows=nrows, ncols=ncols, figsize=(4 * ncols, 3 * nrows),
-                         sharex=True, sharey=self.share_y) as axs:
+                         sharex=True, sharey=self.share_y, squeeze=False) as axs:
             for ax_row, metric_row in zip(axs, all_rows):
                 for ax, (dataset, metric_name) in zip(ax_row, metric_row):
                     self.fill_metric(ax, dataset, metric_name)

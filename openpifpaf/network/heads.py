@@ -5,7 +5,6 @@ import functools
 import logging
 import math
 
-import numpy as np
 import torch
 
 from .. import headmeta
@@ -15,11 +14,11 @@ LOG = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=16)
 def index_field_torch(shape, *, device=None, unsqueeze=(0, 0)):
-    y = torch.arange(shape[0]).view(shape[0], 1).repeat(1,shape[1]).unsqueeze(0)
-    x = torch.transpose(torch.arange(shape[1]).view(shape[1], 1).repeat(1,shape[0]), 0, 1).unsqueeze(0)
-    #yx = np.indices(shape, dtype=np.int32)
-    #xy = np.flip(yx, axis=0)
-    xy = torch.cat((x,y), dim=0).clone()
+    assert len(shape) == 2
+    fliprow = torch.arange(shape[1]).repeat(shape[0], 1)
+    flipcol = torch.arange(shape[0]).repeat(shape[1], 1).t()
+    xy = torch.cat([fliprow.unsqueeze(0), flipcol.unsqueeze(0)])
+
     if device is not None:
         xy = xy.to(device, non_blocking=True)
 
@@ -216,7 +215,7 @@ class CompositeField3(HeadNetwork):
             # scale
             first_scale_feature = self.meta.n_confidences + self.meta.n_vectors * 3
             scales_x = x[:, :, first_scale_feature:first_scale_feature + self.meta.n_scales]
-            #torch.exp_(scales_x)
+
             scales_x[:] = torch.nn.functional.softplus(scales_x)
         elif not self.training and not self.inplace_ops:
             # TODO: CoreMLv4 does not like strided slices.
@@ -246,7 +245,7 @@ class CompositeField3(HeadNetwork):
             # scale
             first_scale_feature = self.meta.n_confidences + self.meta.n_vectors * 3
             scales_x = x[:, first_scale_feature:first_scale_feature + self.meta.n_scales]
-            #scales_x = torch.exp(scales_x)
+
             scales_x = torch.nn.functional.softplus(scales_x)
 
             # concat

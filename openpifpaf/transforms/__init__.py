@@ -2,7 +2,7 @@
 
 import torchvision
 
-from .annotations import AnnotationJitter, NormalizeAnnotations
+from .annotations import AnnotationJitter, NormalizeAnnotations, NormalizeAnnotations_hrnet
 from .compose import Compose
 from .crop import Crop
 from .encoders import Encoders

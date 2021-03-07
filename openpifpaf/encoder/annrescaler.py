@@ -166,6 +166,11 @@ class AnnRescalerDet():
             (width_height[1] - 1) // self.stride + 1,
             (width_height[0] - 1) // self.stride + 1,
         ), dtype=np.bool)
+        # mask = np.ones((
+        #     self.n_categories,
+        #     (width_height[1]) // self.stride,
+        #     (width_height[0]) // self.stride,
+        # ), dtype=np.bool)
         for ann in anns:
             if not ann['iscrowd']:
                 continue

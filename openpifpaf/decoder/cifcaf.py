@@ -65,9 +65,9 @@ class CifCaf(Decoder):
     occupancy_visualizer = visualizer.Occupancy()
     force_complete = False
     greedy = False
-    keypoint_threshold = 0.001
-    keypoint_threshold_rel = 0.0
-    nms = True
+    keypoint_threshold = 0.15
+    keypoint_threshold_rel = 0.5
+    nms = utils.nms.Keypoints()
     dense_coupling = 0.0
 
     reverse_match = True
@@ -94,9 +94,6 @@ class CifCaf(Decoder):
         if self.caf_visualizers is None:
             self.caf_visualizers = [visualizer.Caf(meta) for meta in caf_metas]
 
-        if self.nms is True:
-            self.nms = utils.nms.Keypoints()
-
         self.timers = defaultdict(float)
 
         # init by_target and by_source
@@ -117,6 +114,7 @@ class CifCaf(Decoder):
         group.add_argument('--force-complete-pose',
                            default=False, action='store_true')
 
+        assert utils.nms.Keypoints.keypoint_threshold == cls.keypoint_threshold
         group.add_argument('--keypoint-threshold', type=float,
                            default=cls.keypoint_threshold,
                            help='filter keypoints by score')
@@ -143,18 +141,32 @@ class CifCaf(Decoder):
                            default=False, action='store_true')
         group.add_argument('--ablation-caf-no-rescore',
                            default=False, action='store_true')
+        group.add_argument('--ablation-independent-kp',
+                           default=False, action='store_true')
 
     @classmethod
     def configure(cls, args: argparse.Namespace):
         """Take the parsed argument parser output and configure class variables."""
+        # force complete
+        keypoint_threshold_nms = args.keypoint_threshold
+        if args.force_complete_pose:
+            if not args.ablation_independent_kp:
+                args.keypoint_threshold = 0.0
+            args.keypoint_threshold_rel = 0.0
+            keypoint_threshold_nms = 0.0
         # check consistency
-        assert args.seed_threshold >= args.keypoint_threshold
+        if args.seed_threshold < args.keypoint_threshold:
+            LOG.warning(
+                'consistency: decreasing keypoint threshold to seed threshold of %f',
+                args.seed_threshold,
+            )
+            args.keypoint_threshold = args.seed_threshold
 
         cls.force_complete = args.force_complete_pose
-        cls.keypoint_threshold = (args.keypoint_threshold
-                                  if not args.force_complete_pose else 0.0)
-        cls.keypoint_threshold_rel = (args.keypoint_threshold_rel
-                                      if not args.force_complete_pose else 0.0)
+        cls.keypoint_threshold = args.keypoint_threshold
+        utils.nms.Keypoints.keypoint_threshold = keypoint_threshold_nms
+        cls.keypoint_threshold_rel = args.keypoint_threshold_rel
+
         cls.greedy = args.greedy
         cls.connection_method = args.connection_method
         cls.dense_coupling = args.dense_connections
@@ -168,7 +180,6 @@ class CifCaf(Decoder):
 
     @classmethod
     def factory(cls, head_metas):
-        # TODO: multi-scale
         if cls.dense_coupling:
             return DenseAdapter.factory(head_metas)
         return [
@@ -251,7 +262,7 @@ class CifCaf(Decoder):
         keypoint_score = np.sqrt(new_xysv[3] * xyv[2])  # geometric mean
         if keypoint_score < self.keypoint_threshold:
             return 0.0, 0.0, 0.0, 0.0
-        if keypoint_score / max(0.01, xyv[2]) < self.keypoint_threshold_rel:
+        if keypoint_score < xyv[2] * self.keypoint_threshold_rel:
             return 0.0, 0.0, 0.0, 0.0
         xy_scale_t = max(0.0, new_xysv[2])
 

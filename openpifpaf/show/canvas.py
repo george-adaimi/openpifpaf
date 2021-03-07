@@ -5,10 +5,10 @@ import os
 import numpy as np
 
 try:
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-except ImportError:
+    import matplotlib.pyplot as plt  # pylint: disable=import-error
+except ModuleNotFoundError as err:
+    if err.name != 'matplotlib':
+        raise err
     plt = None
 
 
@@ -108,8 +108,10 @@ class Canvas:
                             1.0 - margin[2],
                             1.0 - margin[3]])
         ax.set_axis_off()
-        ax.set_xlim(-0.5, image.shape[1] - 0.5)  # imshow uses center-pixel-coordinates
-        ax.set_ylim(image.shape[0] - 0.5, -0.5)
+        # ax.set_xlim(-0.5, image.shape[1] - 0.5)  # imshow uses center-pixel-coordinates
+        # ax.set_ylim(image.shape[0] - 0.5, -0.5)
+        # ax.set_xlim(0, image.shape[1])  # imshow uses center-pixel-coordinates
+        # ax.set_ylim(image.shape[0],0)
         fig.add_axes(ax)
         ax.imshow(image)
         if cls.white_overlay:

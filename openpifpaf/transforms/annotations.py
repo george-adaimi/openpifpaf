@@ -56,6 +56,52 @@ class NormalizeAnnotations(Preprocess):
 
         return image, anns, meta
 
+class NormalizeAnnotations_hrnet(Preprocess):
+    @staticmethod
+    def normalize_annotations(anns):
+        anns = copy.deepcopy(anns)
+
+        for ann in anns:
+            if isinstance(ann, annotation.Base):
+                # already converted to an annotation type
+                continue
+
+            if 'keypoints' not in ann:
+                ann['keypoints'] = []
+            if 'iscrowd' not in ann:
+                ann['iscrowd'] = False
+
+            ann['keypoints'] = np.asarray(ann['keypoints'], dtype=np.float32).reshape(-1, 3)
+            ann['bbox'] = np.asarray(ann['bbox'], dtype=np.float32)
+            if 'bbox_original' not in ann:
+                ann['bbox_original'] = np.copy(ann['bbox'])
+            if 'segmentation' in ann:
+                del ann['segmentation']
+
+        return anns
+
+    def __call__(self, image, anns, meta):
+        anns = self.normalize_annotations(anns)
+
+        if meta is None:
+            meta = {}
+
+        # fill meta with defaults if not already present
+        w, h = image.size
+        meta_from_image = {
+            'offset': np.array((0.0, 0.0)),
+            'scale': np.array((1.0, 1.0)),
+            'rotation': {'angle': 0.0, 'width': None, 'height': None},
+            'valid_area': np.array((0.0, 0.0, w, h)),
+            'hflip': False,
+            'width_height': np.array((w, h)),
+        }
+        for k, v in meta_from_image.items():
+            if k not in meta:
+                meta[k] = v
+
+        return image, anns, meta
+
 
 class AnnotationJitter(Preprocess):
     def __init__(self, epsilon=0.5):

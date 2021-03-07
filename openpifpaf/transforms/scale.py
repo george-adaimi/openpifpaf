@@ -44,8 +44,10 @@ def _scale(image, anns, meta, target_w, target_h, resample, *, fast=False):
     assert image.size[1] == target_h
 
     # rescale keypoints
-    x_scale = (image.size[0] - 1) / (w - 1)
-    y_scale = (image.size[1] - 1) / (h - 1)
+    # x_scale = (image.size[0] - 1) / (w - 1)
+    # y_scale = (image.size[1] - 1) / (h - 1)
+    x_scale = (image.size[0]) / (w)
+    y_scale = (image.size[1]) / (h)
     for ann in anns:
         ann['keypoints'][:, 0] = ann['keypoints'][:, 0] * x_scale
         ann['keypoints'][:, 1] = ann['keypoints'][:, 1] * y_scale

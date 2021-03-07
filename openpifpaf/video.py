@@ -33,7 +33,7 @@ except ImportError:
 import torch
 
 import cv2  # pylint: disable=import-error
-from . import decoder, logger, network, plugins, show, transforms, visualizer, __version__
+from . import decoder, logger, network, plugin, show, transforms, visualizer, __version__
 
 try:
     import mss
@@ -49,7 +49,7 @@ class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter,
 
 
 def cli():  # pylint: disable=too-many-statements,too-many-branches
-    plugins.register()
+    plugin.register()
 
     parser = argparse.ArgumentParser(
         prog='python3 -m openpifpaf.video',
@@ -87,15 +87,10 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
     parser.add_argument('--max-frames', type=int, default=None)
     parser.add_argument('--crop', type=int, nargs=4, default=None, help='left top right bottom')
     parser.add_argument('--rotate', default=None, choices=('left', 'right', '180'))
+    parser.add_argument('--separate-debug-ax', default=False, action='store_true')
     args = parser.parse_args()
 
-    args.debug_images = False
-
     logger.configure(args, LOG)  # logger first
-    decoder.configure(args)
-    network.configure(args)
-    show.configure(args)
-    visualizer.configure(args)
 
     # add args.device
     args.device = torch.device('cpu')
@@ -104,6 +99,11 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
         args.device = torch.device('cuda')
         args.pin_memory = True
     LOG.debug('neural network device: %s', args.device)
+
+    decoder.configure(args)
+    network.configure(args)
+    show.configure(args)
+    visualizer.configure(args)
 
     # check whether source should be an int
     if len(args.source) == 1:
@@ -129,8 +129,7 @@ def processor_factory(args):
     model = model.to(args.device)
 
     head_metas = [hn.meta for hn in model.head_nets]
-    processor = decoder.factory(
-        head_metas, profile=args.profile_decoder, profile_device=args.device)
+    processor = decoder.factory(head_metas)
 
     return processor, model
 
@@ -167,7 +166,7 @@ def main():
 
     animation = show.AnimationFrame(
         video_output=args.video_output,
-        second_visual=args.debug or args.debug_indices,
+        second_visual=args.separate_debug_ax,
     )
     last_loop = time.time()
     for frame_i, (ax, ax_second) in enumerate(animation.iter()):
@@ -218,8 +217,6 @@ def main():
 
         if ax is None:
             ax, ax_second = animation.frame_init(image)
-        visualizer.Base.image(image)
-        visualizer.Base.common_ax = ax_second
 
         image_pil = PIL.Image.fromarray(image)
         meta = {
@@ -229,13 +226,15 @@ def main():
             'valid_area': np.array([0.0, 0.0, image_pil.size[0], image_pil.size[1]]),
         }
         processed_image, _, meta = preprocess(image_pil, [], meta)
+        visualizer.Base.image(image, meta=meta)
         visualizer.Base.processed_image(processed_image)
+        visualizer.Base.common_ax = ax_second if args.separate_debug_ax else ax
         LOG.debug('preprocessing time %.3fs', time.time() - start)
 
         preds = processor.batch(model, torch.unsqueeze(processed_image, 0), device=args.device)[0]
 
         start_post = time.perf_counter()
-        preds = preprocess.annotations_inverse(preds, meta)
+        preds = [ann.inverse_transform(meta) for ann in preds]
 
         if args.json_output:
             with open(args.json_output, 'a+') as f:
@@ -244,7 +243,8 @@ def main():
                     'predictions': [ann.json_data() for ann in preds]
                 }, f, separators=(',', ':'))
                 f.write('\n')
-        if not args.json_output or args.video_output:
+        if (not args.json_output or args.video_output) \
+           and (args.separate_debug_ax or not (args.debug or args.debug_indices)):
             ax.imshow(image)
             annotation_painter.annotations(ax, preds)
 

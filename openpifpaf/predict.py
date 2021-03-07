@@ -9,14 +9,14 @@ import os
 import PIL
 import torch
 
-from . import datasets, decoder, logger, network, plugins, show, transforms, visualizer, __version__
+from . import datasets, decoder, logger, network, plugin, show, transforms, visualizer, __version__
 
 LOG = logging.getLogger(__name__)
 
 
 # pylint: disable=too-many-statements
 def cli():
-    plugins.register()
+    plugin.register()
 
     parser = argparse.ArgumentParser(
         prog='python3 -m openpifpaf.predict',
@@ -55,10 +55,16 @@ def cli():
                         help='use dataset specific frequency priors')
     args = parser.parse_args()
 
-    if args.debug_images:
-        args.debug = True
-
     logger.configure(args, LOG)  # logger first
+
+    # add args.device
+    args.device = torch.device('cpu')
+    args.pin_memory = False
+    if not args.disable_cuda and torch.cuda.is_available():
+        args.device = torch.device('cuda')
+        args.pin_memory = True
+    LOG.debug('neural network device: %s', args.device)
+
     decoder.configure(args)
     network.configure(args)
     show.configure(args)
@@ -72,14 +78,6 @@ def cli():
         args.images += glob.glob(args.glob)
     if not args.images:
         raise Exception("no image files given")
-
-    # add args.device
-    args.device = torch.device('cpu')
-    args.pin_memory = False
-    if not args.disable_cuda and torch.cuda.is_available():
-        args.device = torch.device('cuda')
-        args.pin_memory = True
-    LOG.debug('neural network device: %s', args.device)
 
     return args
 
@@ -101,8 +99,8 @@ def processor_factory(args):
         datamodule._get_fg_matrix()
         head_metas[1].fg_matrix = datamodule.head_metas[1].fg_matrix
         head_metas[1].smoothing_pred = datamodule.head_metas[1].smoothing_pred
-    processor = decoder.factory(
-        head_metas, profile=args.profile_decoder, profile_device=args.device)
+    processor = decoder.factory(head_metas)
+
     return processor, model
 
 
@@ -174,9 +172,10 @@ def main():
         # unbatch
         for pred, meta in zip(pred_batch, meta_batch):
             LOG.info('batch %d: %s', batch_i, meta['file_name'])
+
             if len(pred)>0 and isinstance(pred[0], list):
                 pred, _ = pred
-            pred = preprocess.annotations_inverse(pred, meta)
+            pred = [ann.inverse_transform(meta) for ann in pred]
 
             # load the original image if necessary
             cpu_image = None
@@ -196,8 +195,9 @@ def main():
 
             # image output
             if args.show or args.image_output is not None:
+                ext = show.Canvas.out_file_extension
                 image_out_name = out_name(
-                    args.image_output, meta['file_name'], '.predictions.png')
+                    args.image_output, meta['file_name'], '.predictions.' + ext)
                 LOG.debug('image output = %s', image_out_name)
                 with show.image_canvas(cpu_image, image_out_name) as ax:
                     annotation_painter.annotations(ax, pred)

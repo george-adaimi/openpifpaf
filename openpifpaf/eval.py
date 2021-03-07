@@ -1,6 +1,7 @@
 """Evaluation on COCO data."""
 
 import argparse
+import glob
 import json
 import logging
 import os
@@ -11,7 +12,7 @@ import PIL
 import thop
 import torch
 
-from . import datasets, decoder, logger, network, plugins, show, transforms, visualizer, __version__
+from . import datasets, decoder, logger, network, plugin, show, visualizer, __version__
 
 LOG = logging.getLogger(__name__)
 
@@ -29,12 +30,14 @@ def default_output_name(args):
     if args.coco_eval_long_edge is not None and args.coco_eval_long_edge != 641:
         output += '-cocoedge{}'.format(args.coco_eval_long_edge)
 
+    # dense
+    if args.dense_connections:
+        output += '-dense'
+        if args.dense_connections != 1.0:
+            output += '{}'.format(args.dense_connections)
+
     if args.two_scale:
         output += '-twoscale'
-    if args.multi_scale:
-        output += '-multiscale'
-        if args.multi_scale_hflip:
-            output += 'whflip'
 
     return output
 
@@ -45,7 +48,7 @@ class CustomFormatter(argparse.ArgumentDefaultsHelpFormatter,
 
 
 def cli():  # pylint: disable=too-many-statements,too-many-branches
-    plugins.register()
+    plugin.register()
 
     parser = argparse.ArgumentParser(
         prog='python3 -m openpifpaf.eval',
@@ -70,6 +73,7 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
     parser.add_argument('--no-skip-epoch0', dest='skip_epoch0',
                         default=True, action='store_false',
                         help='do not skip eval for epoch 0')
+    parser.add_argument('--watch', default=False, const=60, nargs='?', type=int)
     parser.add_argument('--disable-cuda', action='store_true',
                         help='disable CUDA')
     parser.add_argument('--write-predictions', default=False, action='store_true',
@@ -78,8 +82,7 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
     parser.add_argument('--show-final-ground-truth', default=False, action='store_true')
     args = parser.parse_args()
 
-    if args.debug_images:
-        args.debug = True
+    logger.configure(args, LOG)
 
     # add args.device
     args.device = torch.device('cpu')
@@ -89,11 +92,6 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
         args.pin_memory = True
     LOG.debug('neural network device: %s', args.device)
 
-    # generate a default output filename
-    if args.output is None:
-        args.output = default_output_name(args)
-
-    logger.configure(args, LOG)
     datasets.configure(args)
     decoder.configure(args)
     network.configure(args)
@@ -111,9 +109,11 @@ def count_ops(model, height=641, width=641):
     return gmacs, params
 
 
-# pylint: disable=too-many-statements
-def main():
-    args = cli()
+# pylint: disable=too-many-statements,too-many-branches
+def evaluate(args):
+    # generate a default output filename
+    if args.output is None:
+        args.output = default_output_name(args)
 
     # skip existing?
     if args.skip_epoch0:
@@ -137,8 +137,7 @@ def main():
         model.head_nets = model_cpu.head_nets
 
     head_metas = [hn.meta for hn in model.head_nets]
-    processor = decoder.factory(
-        head_metas, profile=args.profile_decoder, profile_device=args.device)
+    processor = decoder.factory(head_metas)
     # processor.instance_scorer = decocder.instance_scorer.InstanceScoreRecorder()
     # processor.instance_scorer = torch.load('instance_scorer.pkl')
 
@@ -165,13 +164,13 @@ def main():
         # loop over batch
         assert len(image_tensors) == len(meta_batch)
         for pred, gt_anns, image_meta in zip(pred_batch, anns_batch, meta_batch):
-            pred = transforms.Preprocess.annotations_inverse(pred, image_meta)
+            pred = [ann.inverse_transform(image_meta) for ann in pred]
             for metric in metrics:
                 metric.accumulate(pred, image_meta, ground_truth=gt_anns)
 
             if args.show_final_image:
                 # show ground truth and predictions on original image
-                gt_anns = transforms.Preprocess.annotations_inverse(gt_anns, image_meta)
+                gt_anns = [ann.inverse_transform(image_meta) for ann in gt_anns]
 
                 annotation_painter = show.AnnotationPainter()
                 with open(image_meta['local_file_path'], 'rb') as f:
@@ -221,6 +220,44 @@ def main():
             1000 * stats['nn_time'] / stats['n_images'],
             1000 * stats['total_time'] / stats['n_images'],
         )
+
+
+def watch(args):
+    assert args.output is None
+    pattern = args.checkpoint
+    evaluated_pattern = '{}*eval-{}.stats.json'.format(pattern, args.dataset)
+
+    while True:
+        # find checkpoints that have not been evaluated
+        all_checkpoints = glob.glob(pattern)
+        evaluated = glob.glob(evaluated_pattern)
+        if args.skip_epoch0:
+            all_checkpoints = [c for c in all_checkpoints
+                               if not c.endswith('.epoch000')]
+        checkpoints = [c for c in all_checkpoints
+                       if not any(e.startswith(c) for e in evaluated)]
+        LOG.info('%d checkpoints, %d evaluated, %d todo: %s',
+                 len(all_checkpoints), len(evaluated), len(checkpoints), checkpoints)
+
+        # evaluate all checkpoints
+        for checkpoint in checkpoints:
+            # reset
+            args.output = None
+            args.checkpoint = checkpoint
+
+            evaluate(args)
+
+        # wait before looking for more work
+        time.sleep(args.watch)
+
+
+def main():
+    args = cli()
+
+    if args.watch:
+        watch(args)
+    else:
+        evaluate(args)
 
 
 if __name__ == '__main__':

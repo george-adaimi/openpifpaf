@@ -11,8 +11,8 @@ LOG = logging.getLogger(__name__)
 
 class Keypoints:
     suppression = 0.0
-    instance_threshold = 0.0
-    keypoint_threshold = 0.0
+    instance_threshold = 0.15
+    keypoint_threshold = 0.15
     occupancy_visualizer = None
 
     def annotations(self, anns):
@@ -20,7 +20,7 @@ class Keypoints:
 
         for ann in anns:
             ann.data[ann.data[:, 2] < self.keypoint_threshold] = 0.0
-        anns = [ann for ann in anns if ann.score() >= self.instance_threshold]
+        anns = [ann for ann in anns if ann.score >= self.instance_threshold]
 
         if not anns:
             return anns
@@ -32,7 +32,7 @@ class Keypoints:
         shape = (len(anns[0].data), max(1, max_y + 1), max(1, max_x + 1))
         occupied = Occupancy(shape, 2, min_scale=4)
 
-        anns = sorted(anns, key=lambda a: -a.score())
+        anns = sorted(anns, key=lambda a: -a.score)
         for ann in anns:
             assert ann.joint_scales is not None
             assert len(occupied) == len(ann.data)
@@ -52,8 +52,8 @@ class Keypoints:
 
         for ann in anns:
             ann.data[ann.data[:, 2] < self.keypoint_threshold] = 0.0
-        anns = [ann for ann in anns if ann.score() >= self.instance_threshold]
-        anns = sorted(anns, key=lambda a: -a.score())
+        anns = [ann for ann in anns if ann.score >= self.instance_threshold]
+        anns = sorted(anns, key=lambda a: -a.score)
 
         LOG.debug('nms = %.3fs', time.perf_counter() - start)
         return anns
@@ -62,7 +62,7 @@ class Keypoints:
 class Detection:
     suppression = 0.1
     suppression_soft = 0.3
-    instance_threshold = 0.0
+    instance_threshold = 0.15
     iou_threshold = 0.7
     iou_threshold_soft = 0.5
 

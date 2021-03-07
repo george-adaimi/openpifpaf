@@ -1,4 +1,6 @@
+from collections import defaultdict
 import logging
+from typing import Optional
 
 from .cifcaf import CifCaf
 from .cifdet import CifDet
@@ -17,15 +19,15 @@ def cli(parser, *, workers=None):
     group = parser.add_argument_group('decoder configuration')
 
     available_decoders = [dec.__name__.lower() for dec in DECODERS]
-    group.add_argument('--decoder', default=None, nargs='+', choices=available_decoders,
-                       help='Decoders to be considered.')
+    group.add_argument('--decoder', default=None, nargs='+',
+                       help='Decoders to be considered: {}.'.format(available_decoders))
 
     group.add_argument('--seed-threshold', default=utils.CifSeeds.threshold, type=float,
                        help='minimum threshold for seeds')
     assert utils.nms.Detection.instance_threshold == utils.nms.Keypoints.instance_threshold
-    group.add_argument('--instance-threshold', type=float,
-                       default=utils.nms.Keypoints.instance_threshold,
-                       help='filter instances by score')
+    group.add_argument('--instance-threshold', type=float, default=None,
+                       help=('filter instances by score (0.0 with --force-complete-pose '
+                             'else {})'.format(utils.nms.Keypoints.instance_threshold)))
     group.add_argument('--decoder-workers', default=workers, type=int,
                        help='number of workers for pose decoding')
     group.add_argument('--caf-seeds', default=False, action='store_true',
@@ -50,18 +52,16 @@ def configure(args):
        getattr(args, 'batch_size', 1) > 1 and \
        not args.debug:
         args.decoder_workers = args.batch_size
+    if args.instance_threshold is None:
+        if args.force_complete_pose:
+            args.instance_threshold = 0.0
+        else:
+            args.instance_threshold = utils.nms.Keypoints.instance_threshold
 
-    # filter decoders
-    if args.decoder is not None:
-        args.decoder = [dec.lower() for dec in args.decoder]
-        decoders_to_remove = []
-        for dec in DECODERS:
-            if dec.__name__.lower() in args.decoder:
-                continue
-            decoders_to_remove.append(dec)
-        for dec in decoders_to_remove:
-            LOG.debug('removing %s from consideration', dec.__name__)
-            DECODERS.remove(dec)
+    # configure Factory
+    Factory.decoder_filter_from_args(args.decoder)
+    Factory.profile = args.profile_decoder
+    Factory.profile_device = args.device
 
     # configure CifHr
     utils.CifHr.v_threshold = args.cif_th
@@ -78,8 +78,6 @@ def configure(args):
     # configure nms
     utils.nms.Detection.instance_threshold = args.instance_threshold
     utils.nms.Keypoints.instance_threshold = args.instance_threshold
-    utils.nms.Keypoints.keypoint_threshold = (
-        args.keypoint_threshold if not args.force_complete_pose else 0.0)
 
     # TODO: caf seeds
     assert not args.caf_seeds, 'not implemented'
@@ -88,67 +86,87 @@ def configure(args):
         dec.configure(args)
 
 
-def factory(head_metas, *, profile=False, profile_device=None):
-    """Instantiate decoders."""
-    # TODO implement!
-    # dense_coupling=args.dense_coupling,
-    # dense_connections=args.dense_connections,
-    # multi_scale=args.multi_scale,
-    # multi_scale_hflip=args.multi_scale_hflip,
+class Factory:
+    decoder_filter: Optional[dict] = None
+    profile = False
+    profile_device = None
 
-    LOG.debug('head names = %s', [meta.name for meta in head_metas])
-    decoders = [
-        dec
-        for dec_classes in DECODERS
-        for dec in dec_classes.factory(head_metas)
-    ]
-    LOG.debug('matched %d decoders', len(decoders))
-    if not decoders:
-        LOG.warning('no decoders found for heads %s', [meta.name for meta in head_metas])
+    @classmethod
+    def decoder_filter_from_args(cls, list_str):
+        if list_str is None:
+            cls.decoder_filter = None
+            return
 
-    if profile:
-        decode = decoders[0]
-        decode.__class__.__call__ = Profiler(
-            decode.__call__, out_name=profile)
-        decode.fields_batch = ProfilerAutograd(
-            decode.fields_batch, device=profile_device, out_name=profile)
+        cls.decoder_filter = defaultdict(list)
+        for dec_str in list_str:
+            # pylint: disable=unsupported-assignment-operation,unsupported-membership-test,unsubscriptable-object
+            if ':' not in dec_str:
+                if dec_str not in cls.decoder_filter:
+                    cls.decoder_filter[dec_str] = []
+                continue
 
-    return Multi(decoders)
+            dec_str, _, index = dec_str.partition(':')
+            index = int(index)
+            cls.decoder_filter[dec_str].append(index)
 
-    # TODO implement!
-    # if multi_scale:
-    #     if not dense_connections:
-    #         field_config.cif_indices = [v * 3 for v in range(5)]
-    #         field_config.caf_indices = [v * 3 + 1 for v in range(5)]
-    #     else:
-    #         field_config.cif_indices = [v * 2 for v in range(5)]
-    #         field_config.caf_indices = [v * 2 + 1 for v in range(5)]
-    #     field_config.cif_strides = [basenet_stride / head_nets[i].meta.upsample_stride
-    #                                 for i in field_config.cif_indices]
-    #     field_config.caf_strides = [basenet_stride / head_nets[i].meta.upsample_stride
-    #                                 for i in field_config.caf_indices]
-    #     field_config.cif_min_scales = [0.0, 12.0, 16.0, 24.0, 40.0]
-    #     field_config.caf_min_distances = [v * 3.0 for v in field_config.cif_min_scales]
-    #     field_config.caf_max_distances = [160.0, 240.0, 320.0, 480.0, None]
-    # if multi_scale and multi_scale_hflip:
-    #     if not dense_connections:
-    #         field_config.cif_indices = [v * 3 for v in range(10)]
-    #         field_config.caf_indices = [v * 3 + 1 for v in range(10)]
-    #     else:
-    #         field_config.cif_indices = [v * 2 for v in range(10)]
-    #         field_config.caf_indices = [v * 2 + 1 for v in range(10)]
-    #     field_config.cif_strides = [basenet_stride / head_nets[i].meta.upsample_stride
-    #                                 for i in field_config.cif_indices]
-    #     field_config.caf_strides = [basenet_stride / head_nets[i].meta.upsample_stride
-    #                                 for i in field_config.caf_indices]
-    #     field_config.cif_min_scales *= 2
-    #     field_config.caf_min_distances *= 2
-    #     field_config.caf_max_distances *= 2
+        LOG.debug('setup decoder filter: %s', cls.decoder_filter)
 
-    # skeleton = head_nets[1].meta.skeleton
-    # if dense_connections:
-    #     field_config.confidence_scales = (
-    #         [1.0 for _ in skeleton] +
-    #         [dense_coupling for _ in head_nets[2].meta.skeleton]
-    #     )
-    #     skeleton = skeleton + head_nets[2].meta.skeleton
+    @classmethod
+    def decoders(cls, head_metas):
+        if cls.decoder_filter is not None:
+            # pylint: disable=unsupported-membership-test,unsubscriptable-object
+            decoders_by_class = {dec_class.__name__.lower(): dec_class
+                                 for dec_class in DECODERS}
+            decoders_by_class = {c: ds.factory(head_metas)
+                                 for c, ds in decoders_by_class.items()
+                                 if c in cls.decoder_filter}
+            decoders_by_class = {c: [d
+                                     for i, d in enumerate(ds)
+                                     if (not cls.decoder_filter[c]
+                                         or i in cls.decoder_filter[c])]
+                                 for c, ds in decoders_by_class.items()}
+            decoders = [d for ds in decoders_by_class.values() for d in ds]
+            LOG.debug('filtered to %d decoders', len(decoders))
+        else:
+            decoders = [
+                d
+                for dec_class in DECODERS
+                for d in dec_class.factory(head_metas)
+            ]
+            LOG.debug('created %d decoders', len(decoders))
+
+        if not decoders:
+            LOG.warning('no decoders found for heads %s', [meta.name for meta in head_metas])
+
+        return decoders
+
+    @classmethod
+    def __call__(cls, head_metas):
+        """Instantiate decoders."""
+        # TODO implement!
+        # dense_coupling=args.dense_coupling,
+        # dense_connections=args.dense_connections,
+
+        LOG.debug('head names = %s', [meta.name for meta in head_metas])
+        decoders = cls.decoders(head_metas)
+
+        if cls.profile:
+            decode = decoders[0]
+            decode.__class__.__call__ = Profiler(
+                decode.__call__, out_name=cls.profile)
+            decode.fields_batch = ProfilerAutograd(
+                decode.fields_batch, device=cls.profile_device, out_name=cls.profile)
+
+        return Multi(decoders)
+
+        # TODO implement!
+        # skeleton = head_nets[1].meta.skeleton
+        # if dense_connections:
+        #     field_config.confidence_scales = (
+        #         [1.0 for _ in skeleton] +
+        #         [dense_coupling for _ in head_nets[2].meta.skeleton]
+        #     )
+        #     skeleton = skeleton + head_nets[2].meta.skeleton
+
+
+factory = Factory.__call__
