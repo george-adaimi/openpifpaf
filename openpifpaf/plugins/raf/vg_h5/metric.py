@@ -1,14 +1,40 @@
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
+
 from openpifpaf.metric.base import Base
+from maskrcnn_benchmark.data.datasets.evaluation.vg.sgg_eval import SGRecall, SGNoGraphConstraintRecall, SGZeroShotRecall, SGNGZeroShotRecall, SGPairAccuracy, SGMeanRecall, SGNGMeanRecall, SGAccumulateRecall
+import numpy as np
 
 class VG(Base):
-    def __init__(self, gt_dir, img_dir, mode, iou_types=['bbox', 'relations']):
-        assert mode in {'predcls', 'sgdet', 'sgcls', 'phrdet', 'preddet'}
+    text_labels_bbox = ['AP', 'AP0.5', 'AP0.75', 'APS', 'APM', 'APL',
+                        'ART1', 'ART10', 'AR', 'ARS', 'ARM', 'ARL']
+
+    def __init__(self, obj_categories, rel_categories, mode, iou_types=['bbox', 'relations']):
+
+
+        attribute_on = False #cfg.MODEL.ATTRIBUTE_ON
+        num_attributes = 201 #cfg.MODEL.ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES
+        num_rel_category = len(rel_categories) + 1
+        multiple_preds = False #cfg.TEST.RELATION.MULTIPLE_PREDS
+        iou_thres = 0.5 #cfg.TEST.RELATION.IOU_THRESHOLD
+        self.mode = mode
+
+        assert mode in ['predcls', 'sgdet', 'sgcls', 'phrdet', 'preddet']
         self.iou_types = iou_types
         self.bbox_anns_gt = []
         self.bbox_anns_pred = []
-        self.rel_anns = []
+        self.image_ids = []
+        #self.rel_anns = []
+        if 'relations' in self.iou_types:
 
-        if 'relations' in iou_types:
+            predicate_to_ind = {rel:(rel_idx+1) for rel_idx, rel in enumerate(rel_categories)}
+            predicate_to_ind['__background__'] = 0
+            self.ind_to_predicates = sorted(predicate_to_ind, key=lambda k: predicate_to_ind[k])
+
+            class_to_ind = {obj:(obj_idx+1) for obj_idx, obj in enumerate(obj_categories)}
+            self.ind_to_classes = sorted(class_to_ind, key=lambda k: class_to_ind[k])
+
+            class_to_ind['__background__'] = 0
             result_dict = {}
             self.evaluator = {}
             # tradictional Recall@K
@@ -22,14 +48,14 @@ class VG(Base):
             self.evaluator['eval_nog_recall'] = eval_nog_recall
 
             # test on different distribution
-            eval_zeroshot_recall = SGZeroShotRecall(result_dict)
-            eval_zeroshot_recall.register_container(mode)
-            self.evaluator['eval_zeroshot_recall'] = eval_zeroshot_recall
-
-            # test on no graph constraint zero-shot recall
-            eval_ng_zeroshot_recall = SGNGZeroShotRecall(result_dict)
-            eval_ng_zeroshot_recall.register_container(mode)
-            self.evaluator['eval_ng_zeroshot_recall'] = eval_ng_zeroshot_recall
+            # eval_zeroshot_recall = SGZeroShotRecall(result_dict)
+            # eval_zeroshot_recall.register_container(mode)
+            # self.evaluator['eval_zeroshot_recall'] = eval_zeroshot_recall
+            #
+            # # test on no graph constraint zero-shot recall
+            # eval_ng_zeroshot_recall = SGNGZeroShotRecall(result_dict)
+            # eval_ng_zeroshot_recall.register_container(mode)
+            # self.evaluator['eval_ng_zeroshot_recall'] = eval_ng_zeroshot_recall
 
             # used by https://github.com/NVIDIA/ContrastiveLosses4VRD for sgcls and predcls
             eval_pair_accuracy = SGPairAccuracy(result_dict)
@@ -37,18 +63,18 @@ class VG(Base):
             self.evaluator['eval_pair_accuracy'] = eval_pair_accuracy
 
             # used for meanRecall@K
-            eval_mean_recall = SGMeanRecall(result_dict, num_rel_category, dataset.ind_to_predicates, print_detail=True)
+            eval_mean_recall = SGMeanRecall(result_dict, num_rel_category, self.ind_to_predicates, print_detail=True)
             eval_mean_recall.register_container(mode)
             self.evaluator['eval_mean_recall'] = eval_mean_recall
 
             # used for no graph constraint mean Recall@K
-            eval_ng_mean_recall = SGNGMeanRecall(result_dict, num_rel_category, dataset.ind_to_predicates, print_detail=True)
+            eval_ng_mean_recall = SGNGMeanRecall(result_dict, num_rel_category, self.ind_to_predicates, print_detail=True)
             eval_ng_mean_recall.register_container(mode)
             self.evaluator['eval_ng_mean_recall'] = eval_ng_mean_recall
 
             # prepare all inputs
             self.global_container = {}
-            self.global_container['zeroshot_triplet'] = zeroshot_triplet
+            #self.global_container['zeroshot_triplet'] = zeroshot_triplet
             self.global_container['result_dict'] = result_dict
             self.global_container['mode'] = mode
             self.global_container['multiple_preds'] = multiple_preds
@@ -58,60 +84,73 @@ class VG(Base):
             self.global_container['num_attributes'] = num_attributes
 
     def accumulate(self, predictions, image_meta, ground_truth=None):
-        predicates_rel, predictions_det = predictions
+        predictions_rel, predictions_det = predictions
         image_id = int(image_meta['image_id'])
         width, height = image_meta['width_height']
         self.image_ids.append(image_id)
 
-        if 'bbox' in iou_types:
+        box = []
+        bbox_xyxy = []
+        score = []
+        label = []
+        for pred in predictions_det:
+            box.append(pred.bbox)
+            score.append(pred.score)
+            label.append(pred.category_id)
+            bbox_temp = np.copy(pred.bbox)
+            bbox_temp[2:] = bbox_temp[:2] + bbox_temp[2:]
+            bbox_xyxy.append(bbox_temp)
+
+        if 'bbox' in self.iou_types:
             for pred in ground_truth:
-                self.bbox_anns.append({
+                self.bbox_anns_gt.append({
                     'area': pred['area'],
                     'bbox': pred['bbox'], # xywh
                     'category_id': pred['category_id'],
-                    'id': len(self.bbox_anns),
+                    'id': len(self.bbox_anns_gt),
                     'image_id': image_id,
                     'iscrowd': 0,
                 })
-
-            box = []
-            score = []
-            label = []
-            for pred in predictions_det:
-                box.append(pred.bbox)
-                score.append(pred.score)
-                label.append(pred.category_id)
 
             image_id_pred = np.asarray([image_id]*len(box))
-            self.bbox_anns_pred.append(
-                np.column_stack((image_id_pred, box, score, label))
-            )
+            if len(predictions_det)>0:
+                self.bbox_anns_pred.append(
+                    np.column_stack((image_id_pred, box, score, label))
+                )
 
-        if 'relations' in iou_types:
+        if 'relations' in self.iou_types:
+            gt_rels = []
+            gt_dets_bbox = []
+            gt_dets_classes = []
+            for s_idx, pred in enumerate(ground_truth):
+                bbox_temp = np.copy(pred['bbox'])
+                bbox_temp[2:] += bbox_temp[:2]
+                gt_dets_bbox.append(bbox_temp)
+                gt_dets_classes.append(pred['category_id'])
+                for rel_idx, rel in enumerate(pred['predicate']):
+                    gt_rels.append([s_idx, pred['object_index'][rel_idx], rel+1])
+            gt_rels = np.asarray(gt_rels)
+
+            rel_anns_idxs = []
+            rel_anns_rels = []
             for pred in predictions_rel:
-                self.rel_anns.append({
-                    'area': pred.bbox[2]*pred.bbox[3],
-                    'bbox': pred.bbox, # xywh
-                    'category_id': pred.category_id,
-                    'id': len(self.bbox_anns),
-                    'image_id': image_id,
-                    'iscrowd': 0,
-                })
+                rel_anns_idxs.append([int(pred.idx_subj), int(pred.idx_obj)])
+                rel_anns_rels.append(np.insert(pred.rel, 0, 0, axis=0))
 
-            self.evaluate_relation_of_one_image(ground_truth, predicates_rel, self.global_container, self.evaluator)
-    def stats_det(self):
+            self.evaluate_relation_of_one_image((gt_rels, [gt_dets_bbox, gt_dets_classes]), (rel_anns_idxs, rel_anns_rels, bbox_xyxy, score, label), self.global_container, self.evaluator)
+
+    def _stats_det(self):
         fauxcoco = COCO()
         fauxcoco.dataset = {
             'info': {'description': 'use coco script for vg detection evaluation'},
-            'images': [{'id': i} for i in range(len(self.image_ids))],
+            'images': [{'id': i} for i in self.image_ids],
             'categories': [
                 {'supercategory': 'person', 'id': i, 'name': name}
-                for i, name in enumerate(dataset.ind_to_classes) if name != '__background__'
+                for i, name in enumerate(self.ind_to_classes) if name != '__background__'
                 ],
             'annotations': self.bbox_anns_gt,
         }
         fauxcoco.createIndex()
-
         cocolike_predictions = np.concatenate(self.bbox_anns_pred, 0)
         # evaluate via coco API
         res = fauxcoco.loadRes(cocolike_predictions)
@@ -122,10 +161,37 @@ class VG(Base):
         coco_eval.summarize()
         return coco_eval.stats
 
-    def stats_rel(self):
+    def _stats_rel(self):
+        # calculate mean recall
+        result_str = '\n' + '=' * 100 + '\n'
+        self.evaluator['eval_mean_recall'].calculate_mean_recall(self.mode )
+        self.evaluator['eval_ng_mean_recall'].calculate_mean_recall(self.mode )
+
+        # print result
+        result_str += self.evaluator['eval_recall'].generate_print_string(self.mode )
+        result_str += self.evaluator['eval_nog_recall'].generate_print_string(self.mode )
+        #result_str += eval_zeroshot_recall.generate_print_string(mode)
+        #result_str += eval_ng_zeroshot_recall.generate_print_string(mode)
+        result_str += self.evaluator['eval_mean_recall'].generate_print_string(self.mode )
+        result_str += self.evaluator['eval_ng_mean_recall'].generate_print_string(self.mode )
+
+        # if cfg.MODEL.ROI_RELATION_HEAD.USE_GT_BOX:
+        #     result_str += evaluator['eval_pair_accuracy'].generate_print_string(mode)
+        result_str += '=' * 100 + '\n'
+
+        return result_str
 
     def stats(self):
+        stats_det = self._stats_det()
+        stats_rel = self._stats_rel()
+        print(stats_rel)
+        data = {
+            'stats_det': stats_det,
+            'text_labels_det': self.text_labels_bbox,
+            #'stats_rel': stats_rel,
+        }
 
+        return data
     def evaluate_relation_of_one_image(self, groundtruth, prediction, global_container, evaluator):
         """
         Returns:
@@ -137,24 +203,23 @@ class VG(Base):
         mode = global_container['mode']
 
         local_container = {}
-        local_container['gt_rels'] = groundtruth.get_field('relation_tuple').long().detach().cpu().numpy()
+        local_container['gt_rels'] = groundtruth[0]
 
         # if there is no gt relations for current image, then skip it
         if len(local_container['gt_rels']) == 0:
             return
 
-        local_container['gt_boxes'] = groundtruth.convert('xyxy').bbox.detach().cpu().numpy()                   # (#gt_objs, 4)
-        local_container['gt_classes'] = groundtruth.get_field('labels').long().detach().cpu().numpy()           # (#gt_objs, )
+        local_container['gt_boxes'] = np.asarray(groundtruth[1][0])                  # (#gt_objs, 4)
+        local_container['gt_classes'] = np.asarray(groundtruth[1][1])           # (#gt_objs, )
 
         # about relations
-        local_container['pred_rel_inds'] = prediction.get_field('rel_pair_idxs').long().detach().cpu().numpy()  # (#pred_rels, 2)
-        local_container['rel_scores'] = prediction.get_field('pred_rel_scores').detach().cpu().numpy()          # (#pred_rels, num_pred_class)
+        local_container['pred_rel_inds'] = np.asarray(prediction[0])  # (#pred_rels, 2)
+        local_container['rel_scores'] = np.asarray(prediction[1])         # (#pred_rels, num_pred_class)
 
         # about objects
-        local_container['pred_boxes'] = prediction.convert('xyxy').bbox.detach().cpu().numpy()                  # (#pred_objs, 4)
-        local_container['pred_classes'] = prediction.get_field('pred_labels').long().detach().cpu().numpy()     # (#pred_objs, )
-        local_container['obj_scores'] = prediction.get_field('pred_scores').detach().cpu().numpy()              # (#pred_objs, )
-
+        local_container['pred_boxes'] = np.asarray(prediction[2])                  # (#pred_objs, 4)
+        local_container['pred_classes'] = np.asarray(prediction[4])  # (#pred_objs, )
+        local_container['obj_scores'] = np.asarray(prediction[3])            # (#pred_objs, )
 
         # to calculate accuracy, only consider those gt pairs
         # This metric is used by "Graphical Contrastive Losses for Scene Graph Parsing"
@@ -163,8 +228,8 @@ class VG(Base):
             evaluator['eval_pair_accuracy'].prepare_gtpair(local_container)
 
         # to calculate the prior label based on statistics
-        evaluator['eval_zeroshot_recall'].prepare_zeroshot(global_container, local_container)
-        evaluator['eval_ng_zeroshot_recall'].prepare_zeroshot(global_container, local_container)
+        #evaluator['eval_zeroshot_recall'].prepare_zeroshot(global_container, local_container)
+        #evaluator['eval_ng_zeroshot_recall'].prepare_zeroshot(global_container, local_container)
 
         if mode == 'predcls':
             local_container['pred_boxes'] = local_container['gt_boxes']
@@ -216,8 +281,8 @@ class VG(Base):
         # No Graph Constraint Mean Recall
         evaluator['eval_ng_mean_recall'].collect_mean_recall_items(global_container, local_container, mode)
         # Zero shot Recall
-        evaluator['eval_zeroshot_recall'].calculate_recall(global_container, local_container, mode)
+        #evaluator['eval_zeroshot_recall'].calculate_recall(global_container, local_container, mode)
         # No Graph Constraint Zero-Shot Recall
-        evaluator['eval_ng_zeroshot_recall'].calculate_recall(global_container, local_container, mode)
+        #evaluator['eval_ng_zeroshot_recall'].calculate_recall(global_container, local_container, mode)
 
         return

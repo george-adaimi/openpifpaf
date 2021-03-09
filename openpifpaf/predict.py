@@ -114,8 +114,8 @@ def preprocess_factory(args):
         assert args.long_edge, '--long-edge must be provided for batch size > 1'
         pad_t = transforms.CenterPad(args.long_edge)
     else:
-        #pad_t = transforms.CenterPadTight(16)
-        pad_t = transforms.CenterPadTight(32)
+        pad_t = transforms.CenterPadTight(16)
+        #pad_t = transforms.CenterPadTight(32)
 
     return transforms.Compose([
         transforms.NormalizeAnnotations(),

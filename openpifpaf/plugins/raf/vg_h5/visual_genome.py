@@ -57,7 +57,7 @@ class VG(torch.utils.data.Dataset):
     """
 
     def __init__(self, data_dir,*,
-                 preprocess=None, split="train", num_im=-1, num_val_im=5000,
+                 preprocess=None, split="train", num_im=-1, num_val_im=-1,
                  filter_duplicate_rels=True, filter_non_overlap=True, filter_empty_rels=True):
         assert split == "train" or split == "test", "split must be one of [train, val, test]"
         assert num_im >= -1, "the number of samples must be >= 0"
@@ -226,14 +226,14 @@ class VG(torch.utils.data.Dataset):
                 anns.append({
                     'detection_id': len(anns),
                     'image_id': image_id,
-                    'category_id': obj_labels[subj_id],
+                    'category_id': int(obj_labels[subj_id]),
                     'bbox': [x, y, w, h],
                     "area": w*h,
                     "iscrowd": 0,
                     "keypoints":[x, y, 2, x+w, y, 2, x+w, y+h, 2, x, y+h, 2, x+w/2, y+h/2, 2],
                     "segmentation":[],
                     'num_keypoints': 5,
-                    'object_index': [len(anns) + 1],
+                    'object_index': [len(anns) + 1] if obj_id not in dict_counter else [int(dict_counter[obj_id])],
                     'predicate': [pred-1],
                 })
             else:
@@ -251,7 +251,7 @@ class VG(torch.utils.data.Dataset):
                 anns.append({
                     'detection_id': len(anns),
                     'image_id': image_id,
-                    'category_id': obj_labels[obj_id],
+                    'category_id': int(obj_labels[obj_id]),
                     'bbox': [x, y, w, h],
                     "area": w*h,
                     "iscrowd": 0,

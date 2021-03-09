@@ -3,8 +3,10 @@ import openpifpaf
 from . import headmeta
 from .visual_relationship import datamodule
 from .visual_relationship.datamodule_det import VisualRelationshipDetModule
-from .cifdetraf import CifDetRaf
-from .painters import RelationPainter
+#from .cifdetraf import CifDetRaf
+#from .painters import RelationPainter
+from .cifdetraf_updated import CifDetRaf
+from .painters_updated import RelationPainter
 from .annotation import AnnotationRaf
 from .coco_raf.datamodule import CocoDet
 from .visual_genome.datamodule import VGModule
@@ -23,6 +25,7 @@ def register():
     openpifpaf.DATAMODULES['visual_relationship_det'] = VisualRelationshipDetModule
     openpifpaf.DECODERS.add(CifDetRaf)
     openpifpaf.PAINTERS['AnnotationRaf'] = RelationPainter
+    openpifpaf.PAINTERS['AnnotationRaf_updated'] = RelationPainter
 
     openpifpaf.DATAMODULES['cocodet_raf'] = CocoDet
     openpifpaf.DATAMODULES['cocodet_deep'] = CocoDet_deep

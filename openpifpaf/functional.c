@@ -5,7 +5,7 @@
     "distutils": {
         "depends": [],
         "include_dirs": [
-            "/home/georgeadaimi/venv/cifdet/lib/python3.8/site-packages/numpy/core/include"
+            "/home/georgeadaimi/venv/cifdet_rcnn/lib/python3.8/site-packages/numpy/core/include"
         ],
         "name": "openpifpaf.functional",
         "sources": [

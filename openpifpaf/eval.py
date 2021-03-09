@@ -164,7 +164,11 @@ def evaluate(args):
         # loop over batch
         assert len(image_tensors) == len(meta_batch)
         for pred, gt_anns, image_meta in zip(pred_batch, anns_batch, meta_batch):
-            pred = [ann.inverse_transform(image_meta) for ann in pred]
+            if pred and isinstance(pred[0], list):
+                for i in range(len(pred)):
+                    pred[i] = [ann.inverse_transform(image_meta) for ann in pred[i]]
+            else:
+                pred = [ann.inverse_transform(image_meta) for ann in pred]
             for metric in metrics:
                 metric.accumulate(pred, image_meta, ground_truth=gt_anns)
 

@@ -9,7 +9,7 @@ from .annotation import AnnotationRaf
 from openpifpaf.transforms import Preprocess, Crop
 from openpifpaf.transforms.hflip import _HorizontalSwap
 
-class ToRafAnnotations:
+class ToRafAnnotations_old:
     def __init__(self, obj_categories, rel_categories):
         self.obj_categories = obj_categories
         self.rel_categories = rel_categories
@@ -31,6 +31,33 @@ class ToRafAnnotations:
                                     object_category, category_id,
                                     predicate+1, None, None, None, bbox, bbox_object
                                     ))
+
+        return annotations
+
+class ToRafAnnotations:
+    def __init__(self, obj_categories, rel_categories):
+        self.obj_categories = obj_categories
+        self.rel_categories = rel_categories
+
+    def __call__(self, anns):
+        annotations = []
+        for ann in anns:
+            if ann['iscrowd'] or not np.any(ann['bbox']) or not len(ann['object_index']) > 0:
+                continue
+            bbox = ann['bbox']
+            category_id = ann['category_id']
+            for object_id, predicate in zip(ann['object_index'], ann['predicate']):
+                if anns[object_id]['iscrowd']:
+                    continue
+                ann_subj = AnnotationDet(self.obj_categories).set(category_id, 1.0, bbox)
+                bbox_object = anns[object_id]['bbox']
+                object_category = anns[object_id]['category_id']
+                ann_obj = AnnotationDet(self.obj_categories).set(object_category, 1.0, bbox_object)
+                annotations.append(AnnotationRaf(self.obj_categories,
+                                    self.rel_categories).set(
+                                    obj=ann_obj, subj=ann_subj,
+                                    category_id_rel=predicate+1,
+                                    score_rel=1.0, idx_subj=None, idx_obj=None))
 
         return annotations
 

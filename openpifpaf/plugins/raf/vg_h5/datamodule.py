@@ -10,6 +10,7 @@ from .constants import BBOX_KEYPOINTS, BBOX_HFLIP, OBJ_CATEGORIES, REL_CATEGORIE
 from .. import headmeta
 from ..raf import Raf
 from ..toannotations import ToRafAnnotations, Raf_HFlip
+from . import metric
 
 class VGModule(openpifpaf.datasets.DataModule):
     data_dir = "data/visual_genome/"
@@ -17,7 +18,7 @@ class VGModule(openpifpaf.datasets.DataModule):
     debug = False
     pin_memory = False
 
-    n_images = None
+    n_images = -1
     square_edge = 513
     extended_scale = False
     orientation_invariant = 0.0
@@ -249,7 +250,7 @@ class VGModule(openpifpaf.datasets.DataModule):
         train_data = VG(
             data_dir=self.data_dir,
             preprocess=self._preprocess(),
-            #n_images=self.n_images,
+            num_im=self.n_images,
         )
         return torch.utils.data.DataLoader(
             train_data, batch_size=self.batch_size, shuffle=not self.debug and self.augmentation,
@@ -260,7 +261,7 @@ class VGModule(openpifpaf.datasets.DataModule):
         val_data = VG(
             data_dir=self.data_dir,
             preprocess=self._preprocess(),
-            #n_images=self.n_images,
+            num_im=self.n_images,
             split='test'
         )
 
@@ -301,10 +302,10 @@ class VGModule(openpifpaf.datasets.DataModule):
             rescale_t,
             padding_t,
             orientation_t,
-            openpifpaf.transforms.ToAnnotations([
-                ToRafAnnotations(self.obj_categories, self.rel_categories),
-                openpifpaf.transforms.ToCrowdAnnotations(self.obj_categories),
-            ]),
+            # openpifpaf.transforms.ToAnnotations([
+            #     ToRafAnnotations(self.obj_categories, self.rel_categories),
+            #     openpifpaf.transforms.ToCrowdAnnotations(self.obj_categories),
+            # ]),
             openpifpaf.transforms.EVAL_TRANSFORM,
         ])
     def _get_fg_matrix(self):
@@ -323,7 +324,7 @@ class VGModule(openpifpaf.datasets.DataModule):
         eval_data = VG(
             data_dir=self.data_dir,
             preprocess=self._eval_preprocess(),
-            #n_images=self.n_images,
+            num_im=self.n_images,
             split='test'
         )
         self._get_fg_matrix()
@@ -332,5 +333,5 @@ class VGModule(openpifpaf.datasets.DataModule):
             pin_memory=self.pin_memory, num_workers=self.loader_workers, drop_last=False,
             collate_fn=openpifpaf.datasets.collate_images_anns_meta)
 
-    # def metrics(self):
-    #     return [metric.VRD()]
+    def metrics(self):
+        return [metric.VG(obj_categories=self.obj_categories, rel_categories=self.rel_categories, mode='sgdet')]
