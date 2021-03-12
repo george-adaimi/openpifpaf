@@ -21,7 +21,8 @@ LOG = logging.getLogger(__name__)
 
 
 def optionally_shaded(ax, x, y, *, color, label, **kwargs):
-    stride = int(len(x) / (x[-1] - x[0]) / 30.0) if len(x) > 30 else 1  # 30 per epoch
+    epochs = x[-1] - x[0] if len(x) > 1 else 0.0
+    stride = int(len(x) / epochs / 30.0) if len(x) > 30 else 1  # 30 per epoch
     if stride > 1:
         x_binned = np.array([x[i] for i in range(0, len(x), stride)][:-1])
         y_binned = np.stack([y[i:i + stride] for i in range(0, len(x), stride)][:-1])
@@ -31,7 +32,7 @@ def optionally_shaded(ax, x, y, *, color, label, **kwargs):
         ax.plot(x_binned, y_mean, color=color, label=label, **kwargs)
         ax.fill_between(x_binned, y_min, y_max, alpha=0.2, facecolor=color)
     else:
-        LOG.debug('not shading: entries = %d, epochs = %f', len(x), x[-1] - x[0])
+        LOG.debug('not shading: entries = %d, epochs = %f', len(x), epochs)
         ax.plot(x, y, color=color, label=label, **kwargs)
 
 
@@ -142,7 +143,7 @@ class Plots():
 
         ax.set_xlabel('epoch')
         ax.set_ylabel('learning rate')
-        ax.set_yscale('log', nonposy='clip')
+        ax.set_yscale('log', nonpositive='clip')
         ax.legend(loc='upper left')
 
     def epoch_loss(self, ax):
@@ -151,12 +152,12 @@ class Plots():
 
             if 'val-epoch' in data:
                 x = np.array([row.get('epoch') for row in data['val-epoch']])
-                y = np.array([row.get('loss') for row in data['val-epoch']], dtype=np.float)
+                y = np.array([row.get('loss') for row in data['val-epoch']], dtype=np.float64)
                 ax.plot(x, y, 'o-', color=color, markersize=2, label=label)
 
             if 'train-epoch' in data:
                 x = np.array([row.get('epoch') for row in data['train-epoch']])
-                y = np.array([row.get('loss') for row in data['train-epoch']], dtype=np.float)
+                y = np.array([row.get('loss') for row in data['train-epoch']], dtype=np.float64)
                 m = x > 0
                 ax.plot(x[m], y[m], 'x-', color=color, linestyle='dotted', markersize=2)
 
@@ -164,7 +165,7 @@ class Plots():
         ax.set_ylabel('loss')
         # ax.set_ylim(0.0, 4.0)
         # if min(y) > -0.1:
-        #     ax.set_yscale('log', nonposy='clip')
+        #     ax.set_yscale('log', nonpositive='clip')
         ax.grid(linestyle='dotted')
         ax.legend(loc='upper right')
         ax.text(0.01, 1.01, 'train (cross-dotted), val (dot-solid)',
@@ -183,7 +184,7 @@ class Plots():
             if 'val-epoch' in data:
                 x = np.array([row.get('epoch') for row in data['val-epoch']])
                 y = np.array([row.get('head_losses')[field_i]
-                              for row in data['val-epoch']], dtype=np.float)
+                              for row in data['val-epoch']], dtype=np.float64)
                 m = np.logical_not(np.isnan(y))
                 ax.plot(x[m], y[m], 'o-', color=color, markersize=2, label=label)
                 last_five_y.append(y[m][-5:])
@@ -191,7 +192,7 @@ class Plots():
             if 'train-epoch' in data:
                 x = np.array([row.get('epoch') for row in data['train-epoch']])
                 y = np.array([row.get('head_losses')[field_i]
-                              for row in data['train-epoch']], dtype=np.float)
+                              for row in data['train-epoch']], dtype=np.float64)
                 m = np.logical_not(np.isnan(y))
                 ax.plot(x[m], y[m], 'x-', color=color, linestyle='dotted', markersize=2)
                 last_five_y.append(y[m][-5:])
@@ -199,13 +200,13 @@ class Plots():
         if not last_five_y:
             return
         ax.set_xlabel('epoch')
-        ax.set_ylabel(field_name)
+        ax.set_ylabel(field_name, fontsize=8 if len(field_name) < 30 else 5)
         last_five_y = np.concatenate(last_five_y)
         if not self.share_y and last_five_y.shape[0]:
             ax.set_ylim(np.min(last_five_y), np.max(last_five_y))
         # ax.set_ylim(0.0, 1.0)
         # if min(y) > -0.1:
-        #     ax.set_yscale('log', nonposy='clip')
+        #     ax.set_yscale('log', nonpositive='clip')
         ax.grid(linestyle='dotted')
         # ax.legend(loc='upper right')
         ax.text(0.01, 1.01, 'train (cross-dotted), val (dot-solid)',
@@ -222,7 +223,7 @@ class Plots():
                               if row.get('batch', 1) > 0])
                 y = np.array([row.get('data_time') / row.get('time') * 100.0
                               for row in data['train']
-                              if row.get('batch', 1) > 0], dtype=np.float)
+                              if row.get('batch', 1) > 0], dtype=np.float64)
                 optionally_shaded(ax, x, y, color=color, label=label)
 
         ax.set_xlabel('epoch')
@@ -242,7 +243,7 @@ class Plots():
                     )
                 for loss_index, xy in xy_all.items():
                     x = np.array([x for x, _ in xy])
-                    y = np.array([y for _, y in xy], dtype=np.float)
+                    y = np.array([y for _, y in xy], dtype=np.float64)
                     miny = min(miny, np.min(y))
 
                     kwargs = {}
@@ -256,7 +257,7 @@ class Plots():
         ax.set_ylabel('training loss')
         # ax.set_ylim(0, 8)
         if miny > -0.1:
-            ax.set_yscale('log', nonposy='clip')
+            ax.set_yscale('log', nonpositive='clip')
         ax.grid(linestyle='dotted')
         ax.legend(loc='upper right')
 
@@ -271,15 +272,15 @@ class Plots():
             if 'train' in data:
                 x = np.array([fractional_epoch(row) for row in data['train']])
                 y = np.array([row.get('head_losses')[field_i]
-                              for row in data['train']], dtype=np.float)
+                              for row in data['train']], dtype=np.float64)
                 m = np.logical_not(np.isnan(y))
                 optionally_shaded(ax, x[m], y[m], color=color, label=label)
 
         ax.set_xlabel('epoch')
-        ax.set_ylabel(format(field_name))
+        ax.set_ylabel(field_name, fontsize=8 if len(field_name) < 30 else 5)
         # ax.set_ylim(3e-3, 3.0)
         if not self.share_y and min(y) > -0.1:
-            ax.set_yscale('log', nonposy='clip')
+            ax.set_yscale('log', nonpositive='clip')
         ax.grid(linestyle='dotted')
         # ax.legend(loc='upper right')
 
@@ -294,7 +295,7 @@ class Plots():
             if 'train' in data:
                 x = np.array([fractional_epoch(row) for row in data['train']])
                 y = np.array([row['mtl_sigmas'][field_i] if 'mtl_sigmas' in row else np.nan
-                              for row in data['train']], dtype=np.float)
+                              for row in data['train']], dtype=np.float64)
                 m = np.logical_not(np.isnan(y))
                 optionally_shaded(ax, x[m], y[m], color=color, label=label)
 
@@ -303,7 +304,7 @@ class Plots():
         ax.set_ylim(-0.1, 1.1)
         if min(y) > -0.1:
             ax.set_ylim(3e-3, 3.0)
-            ax.set_yscale('log', nonposy='clip')
+            ax.set_yscale('log', nonpositive='clip')
         ax.grid(linestyle='dotted')
         # ax.legend(loc='upper right')
 

@@ -16,6 +16,12 @@ LOG = logging.getLogger(__name__)
 
 
 class Canvas:
+    """Canvas for plotting.
+
+    All methods expose Axes objects. To get Figure objects, you can ask the axis
+    `ax.get_figure()`.
+    """
+
     all_images_directory = None
     all_images_count = 0
     show = False
@@ -49,15 +55,14 @@ class Canvas:
             dpi = cls.blank_dpi
 
         if 'figsize' not in kwargs:
-            # kwargs['figsize'] = (15, 8)
             kwargs['figsize'] = (10, 6)
 
         if nomargin:
-            fig = plt.figure(dpi=dpi, **kwargs)
-            ax = plt.Axes(fig, [0.0, 0.0, 1.0, 1.0])
-            fig.add_axes(ax)
-        else:
-            fig, ax = plt.subplots(dpi=dpi, **kwargs)
+            if 'gridspec_kw' not in kwargs:
+                kwargs['gridspec_kw'] = {}
+            kwargs['gridspec_kw']['wspace'] = 0
+            kwargs['gridspec_kw']['hspace'] = 0
+        fig, ax = plt.subplots(dpi=dpi, **kwargs)
 
         yield ax
 
@@ -124,10 +129,36 @@ class Canvas:
             plt.show()
         plt.close(fig)
 
+    @classmethod
+    @contextmanager
+    def annotation(cls, ann, *,
+                   filename=None,
+                   margin=0.5,
+                   fig_w=None,
+                   fig_h=5.0,
+                   **kwargs):
+        bbox = ann.bbox()
+        xlim = bbox[0] - margin, bbox[0] + bbox[2] + margin
+        ylim = bbox[1] - margin, bbox[1] + bbox[3] + margin
+        if fig_w is None:
+            fig_w = fig_h / (ylim[1] - ylim[0]) * (xlim[1] - xlim[0])
+        fig_w *= kwargs.get('ncols', 1)
+        fig_h *= kwargs.get('nrows', 1)
+
+        with cls.blank(filename, figsize=(fig_w, fig_h), nomargin=True, **kwargs) as ax:
+            iter_ax = [ax] if hasattr(ax, 'set_axis_off') else ax
+            for ax_ in iter_ax:
+                ax_.set_axis_off()
+                ax_.set_xlim(*xlim)
+                ax_.set_ylim(*ylim)
+
+            yield ax
+
 
 # keep previous interface for now:
 canvas = Canvas.blank
 image_canvas = Canvas.image
+annotation_canvas = Canvas.annotation
 
 
 def white_screen(ax, alpha=0.9):

@@ -29,6 +29,9 @@ class BaseNetwork(torch.nn.Module):
     def configure(cls, args: argparse.Namespace):
         """Take the parsed argument parser output and configure class variables."""
 
+    def forward(self, *args):
+        raise NotImplementedError
+
 
 class ShuffleNetV2(BaseNetwork):
     pretrained = True
@@ -393,7 +396,7 @@ class ShuffleNetV2K(BaseNetwork):
         # layer norms
         if args.shufflenetv2k_instance_norm:
             cls.layer_norm = lambda x: torch.nn.InstanceNorm2d(
-                x, momentum=0.01, affine=True, track_running_stats=True)
+                x, affine=True, track_running_stats=True)
         if args.shufflenetv2k_group_norm:
             cls.layer_norm = lambda x: torch.nn.GroupNorm(
                 (32 if x % 32 == 0 else 29) if x > 100 else 4, x)

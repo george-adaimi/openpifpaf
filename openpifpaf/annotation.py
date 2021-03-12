@@ -4,14 +4,14 @@ import numpy as np
 
 # pylint: disable=import-error
 from .functional import scalar_value_clipped
-from . import utils
+from . import headmeta, utils
 
 
 class Base:
     def inverse_transform(self, meta):
         raise NotImplementedError
 
-    def json_data(self):
+    def json_data(self, coordinate_digits=2):
         raise NotImplementedError
 
 
@@ -43,6 +43,18 @@ class Annotation(Base):
             self.score_weights[-len(self.suppress_score_index):] = 0.0
         self.score_weights /= np.sum(self.score_weights)
 
+    @classmethod
+    def from_cif_meta(cls, cif_meta: headmeta.Cif):
+        scale = np.sqrt(
+            (np.max(cif_meta.pose[:, 0]) - np.min(cif_meta.pose[:, 0]))
+            * (np.max(cif_meta.pose[:, 1]) - np.min(cif_meta.pose[:, 1]))
+        )
+        ann = cls(keypoints=cif_meta.keypoints,
+                  skeleton=cif_meta.draw_skeleton,
+                  score_weights=cif_meta.score_weights)
+        ann.set(cif_meta.pose, np.array(cif_meta.sigmas) * scale, fixed_score='')
+        return ann
+
     @property
     def category(self):
         return self.categories[self.category_id - 1]
@@ -52,6 +64,7 @@ class Annotation(Base):
         return self
 
     def set(self, data, joint_scales=None, *, category_id=1, fixed_score=None, fixed_bbox=None):
+        """Set the data (keypoint locations, category, ...) for this instance."""
         self.data = data
         if joint_scales is not None:
             self.joint_scales = joint_scales
@@ -66,12 +79,22 @@ class Annotation(Base):
         return self
 
     def rescale(self, scale_factor):
-        self.data[:, 0:2] *= scale_factor
+        if len(scale_factor) == 2:
+            scale_x, scale_y = scale_factor
+            scale_factor = 0.5 * (scale_x + scale_y)
+        else:
+            scale_x = scale_factor
+            scale_y = scale_factor
+
+        self.data[:, 0] *= scale_x
+        self.data[:, 1] *= scale_y
         if self.joint_scales is not None:
             self.joint_scales *= scale_factor
         for _, __, c1, c2 in self.decoding_order:
-            c1[:2] *= scale_factor
-            c2[:2] *= scale_factor
+            c1[0:1] *= scale_x
+            c1[1:2] *= scale_y
+            c2[0:1] *= scale_x
+            c2[1:2] *= scale_y
         return self
 
     def fill_joint_scales(self, scales, hr_scale=1.0):
@@ -105,20 +128,20 @@ class Annotation(Base):
             np.max(self.data[m, 1]) - np.min(self.data[m, 1]),
         )
 
-    def json_data(self):
+    def json_data(self, coordinate_digits=2):
         """Data ready for json dump."""
 
         # avoid visible keypoints becoming invisible due to rounding
         v_mask = self.data[:, 2] > 0.0
         keypoints = np.copy(self.data)
         keypoints[v_mask, 2] = np.maximum(0.01, keypoints[v_mask, 2])
-        keypoints = np.around(keypoints.astype(np.float64), 2)
+        keypoints = np.around(keypoints.astype(np.float64), coordinate_digits)
 
         # convert to float64 before rounding because otherwise extra digits
         # will be added when converting to Python type
         data = {
             'keypoints': keypoints.reshape(-1).tolist(),
-            'bbox': [round(float(c), 2) for c in self.bbox()],
+            'bbox': [round(float(c), coordinate_digits) for c in self.bbox()],
             'score': max(0.001, round(self.score, 3)),
             'category_id': self.category_id,
         }
@@ -211,12 +234,12 @@ class AnnotationDet(Base):
     def category(self):
         return self.categories[self.category_id - 1]
 
-    def json_data(self):
+    def json_data(self, coordinate_digits=2):
         return {
             'category_id': self.category_id,
             'category': self.category,
             'score': max(0.001, round(float(self.score), 3)),
-            'bbox': [round(float(c), 2) for c in self.bbox],
+            'bbox': [round(float(c), coordinate_digits) for c in self.bbox],
         }
 
     def inverse_transform(self, meta):
@@ -255,11 +278,11 @@ class AnnotationCrowd(Base):
     def category(self):
         return self.categories[self.category_id - 1]
 
-    def json_data(self):
+    def json_data(self, coordinate_digits=2):
         return {
             'category_id': self.category_id,
             'category': self.category,
-            'bbox': [round(float(c), 2) for c in self.bbox],
+            'bbox': [round(float(c), coordinate_digits) for c in self.bbox],
         }
 
     def inverse_transform(self, meta):

@@ -1,6 +1,6 @@
 # Book settings
 title: OpenPifPaf Guide
-author: <a href="https://www.svenkreiss.com">Sven Kreiss</a> and <a href="https://github.com/vita-epfl/openpifpaf/graphs/contributors">contributors</a>
+author: <a href="https://www.svenkreiss.com">Sven Kreiss</a> and <a href="https://github.com/vita-epfl/openpifpaf/graphs/contributors">contributors</a>.
 copyright: "2020-2021"
 email: research@svenkreiss.com
 logo: logo.png
@@ -12,6 +12,9 @@ logo: logo.png
 html:
   favicon: favicon.png
   extra_navbar: ""
+  use_repository_button: True
+  extra_footer: |
+    <div>Powered by <a href="https://jupyterbook.org/">Jupyter Book</a>.</div>
 
 # Information about where the book exists on the web
 repository:
@@ -26,6 +29,10 @@ sphinx:
   extra_extensions: [sphinx.ext.autodoc]
   config:
     autodoc_member_order: bysource
+    language: en
 
 execute:
   timeout: 600
+
+bibtex_bibfiles:
+  - references.bib

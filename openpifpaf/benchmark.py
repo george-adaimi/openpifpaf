@@ -233,9 +233,12 @@ def main():
             Ablation('.greedy', eval_args + ['--greedy']),
             Ablation('.no-reverse', eval_args + ['--no-reverse-match']),
             Ablation('.greedy.no-reverse', eval_args + ['--greedy', '--no-reverse-match']),
-            Ablation('.greedy.dense', eval_args + ['--greedy', '--dense-connections']),
-            Ablation('.dense', eval_args + ['--dense-connections']),
-            Ablation('.dense.hierarchy', eval_args + ['--dense-connections=0.1']),
+            Ablation('.greedy.dense', eval_args + [
+                '--greedy', '--cocokp-with-dense', '--dense-connections']),
+            Ablation('.dense', eval_args + [
+                '--cocokp-with-dense', '--dense-connections']),
+            Ablation('.dense.hierarchy', eval_args + [
+                '--cocokp-with-dense', '--dense-connections=0.1']),
         ]
     if args.v012_ablation_2:
         eval_args_nofc = [a for a in eval_args
@@ -271,7 +274,7 @@ def main():
     Benchmark(
         configs, args.output,
         reference_config=configs[0] if len(args.checkpoints) == 1 else None,
-        stat_filter=('AP', 'APM', 'APL'),
+        stat_filter=('AP', 'AP0.5', 'AP0.75', 'APM', 'APL'),
         stat_scale=100.0,
     ).run()
 

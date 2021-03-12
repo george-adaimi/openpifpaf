@@ -60,7 +60,7 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
     parser.add_argument('--version', action='version',
                         version='OpenPifPaf {version}'.format(version=__version__))
 
-    network.cli(parser)
+    network.Factory.cli(parser)
     decoder.cli(parser)
     logger.cli(parser)
     show.cli(parser)
@@ -98,10 +98,11 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
     if not args.disable_cuda and torch.cuda.is_available():
         args.device = torch.device('cuda')
         args.pin_memory = True
-    LOG.debug('neural network device: %s', args.device)
+    LOG.info('neural network device: %s (CUDA available: %s, count: %d)',
+             args.device, torch.cuda.is_available(), torch.cuda.device_count())
 
     decoder.configure(args)
-    network.configure(args)
+    network.Factory.configure(args)
     show.configure(args)
     visualizer.configure(args)
 
@@ -125,7 +126,7 @@ def cli():  # pylint: disable=too-many-statements,too-many-branches
 
 
 def processor_factory(args):
-    model, _ = network.factory_from_args(args)
+    model, _ = network.Factory().factory()
     model = model.to(args.device)
 
     head_metas = [hn.meta for hn in model.head_nets]
@@ -229,7 +230,7 @@ def main():
         visualizer.Base.image(image, meta=meta)
         visualizer.Base.processed_image(processed_image)
         visualizer.Base.common_ax = ax_second if args.separate_debug_ax else ax
-        LOG.debug('preprocessing time %.3fs', time.time() - start)
+        preprocessing_time = time.time() - start
 
         preds = processor.batch(model, torch.unsqueeze(processed_image, 0), device=args.device)[0]
 
@@ -247,11 +248,12 @@ def main():
            and (args.separate_debug_ax or not (args.debug or args.debug_indices)):
             ax.imshow(image)
             annotation_painter.annotations(ax, preds)
-
-        LOG.debug('time post = %.3fs', time.perf_counter() - start_post)
-        LOG.info('frame %d, loop time = %.3fs, FPS = %.3f',
+        postprocessing_time = time.perf_counter() - start_post
+        LOG.info('frame %d, loop time = %.3fs (pre = %.3fs, post = %.3fs), FPS = %.3f',
                  frame_i,
                  time.time() - last_loop,
+                 preprocessing_time,
+                 postprocessing_time,
                  1.0 / (time.time() - last_loop))
         last_loop = time.time()
 

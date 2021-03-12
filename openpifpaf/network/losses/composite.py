@@ -10,9 +10,10 @@ LOG = logging.getLogger(__name__)
 
 
 class CompositeLoss(torch.nn.Module):
-    b_scale = 1.0
+    prescale = 1.0
+    regression_loss = components.Laplace()
 
-    def __init__(self, head_net: heads.CompositeField3, regression_loss):
+    def __init__(self, head_net: heads.CompositeField3):
         super().__init__()
         self.n_vectors = head_net.meta.n_vectors
         self.n_scales = head_net.meta.n_scales
@@ -20,12 +21,9 @@ class CompositeLoss(torch.nn.Module):
         LOG.debug('%s: n_vectors = %d, n_scales = %d',
                   head_net.meta.name, self.n_vectors, self.n_scales)
 
-        self.confidence_loss = components.Bce(detach_focal=True)
-        self.regression_loss = regression_loss or components.laplace_loss
+        self.confidence_loss = components.Bce()
         self.scale_losses = torch.nn.ModuleList([
-            components.ScaleLoss(self.b_scale, relative=True)
-            for _ in range(self.n_scales)
-        ])
+            components.Scale() for _ in range(self.n_scales)])
         self.field_names = (
             ['{}.{}.c'.format(head_net.meta.dataset, head_net.meta.name)]
             + ['{}.{}.vec{}'.format(head_net.meta.dataset, head_net.meta.name, i + 1)
@@ -34,18 +32,37 @@ class CompositeLoss(torch.nn.Module):
                for i in range(self.n_scales)]
         )
 
+        w = head_net.meta.training_weights
+        self.weights = None
+        if w is not None:
+            self.weights = torch.ones([1, head_net.meta.n_fields, 1, 1], requires_grad=False)
+            self.weights[0, :, 0, 0] = torch.Tensor(w)
+        LOG.debug("The weights for the keypoints are %s", self.weights)
         self.bce_blackout = None
         self.previous_losses = None
 
     @classmethod
     def cli(cls, parser: argparse.ArgumentParser):
         group = parser.add_argument_group('Composite Loss')
-        group.add_argument('--b-scale', default=CompositeLoss.b_scale, type=float,
-                           help='Laplace width b for scale loss')
+        group.add_argument('--loss-prescale', default=cls.prescale, type=float)
+        group.add_argument('--regression-loss', default='laplace',
+                           choices=['smoothl1', 'l1', 'laplace'],
+                           help='type of regression loss')
 
     @classmethod
     def configure(cls, args: argparse.Namespace):
-        cls.b_scale = args.b_scale
+        cls.prescale = args.loss_prescale
+
+        if args.regression_loss == 'smoothl1':
+            cls.regression_loss = components.SmoothL1()
+        elif args.regression_loss == 'l1':
+            cls.regression_loss = staticmethod(components.l1_loss)
+        elif args.regression_loss == 'laplace':
+            cls.regression_loss = components.Laplace()
+        elif args.regression_loss is None:
+            cls.regression_loss = components.Laplace()
+        else:
+            raise Exception('unknown regression loss type {}'.format(args.regression_loss))
 
     def _confidence_loss(self, x_confidence, t_confidence):
         # TODO assumes one confidence
@@ -69,22 +86,28 @@ class CompositeLoss(torch.nn.Module):
         bce_target = torch.masked_select(t_confidence, bce_masks)
         x_confidence = torch.masked_select(x_confidence, bce_masks)
         ce_loss = self.confidence_loss(x_confidence, bce_target)
+        if self.prescale != 1.0:
+            ce_loss = ce_loss * self.prescale
+        if self.weights is not None:
+            weight = torch.ones_like(t_confidence, requires_grad=False)
+            weight[:] = self.weights
+            weight = torch.masked_select(weight, bce_masks)
+            ce_loss = ce_loss * weight
         ce_loss = ce_loss.sum() / batch_size
 
         return ce_loss
 
-    def _localization_loss(self, x_regs, t_regs, *, weight=None):
+    def _localization_loss(self, x_regs, t_regs):
         assert x_regs.shape[2] == self.n_vectors * 3
         assert t_regs.shape[2] == self.n_vectors * 3
         batch_size = t_regs.shape[0]
 
         reg_losses = []
+        if self.weights is not None:
+            weight = torch.ones_like(t_regs[:, :, 0], requires_grad=False)
+            weight[:] = self.weights
         for i in range(self.n_vectors):
             reg_masks = torch.isnan(t_regs[:, :, i * 2]).bitwise_not_()
-            if not torch.any(reg_masks):
-                reg_losses.append(None)
-                continue
-
             loss = self.regression_loss(
                 torch.masked_select(x_regs[:, :, i * 2 + 0], reg_masks),
                 torch.masked_select(x_regs[:, :, i * 2 + 1], reg_masks),
@@ -93,25 +116,32 @@ class CompositeLoss(torch.nn.Module):
                 torch.masked_select(t_regs[:, :, i * 2 + 1], reg_masks),
                 torch.masked_select(t_regs[:, :, self.n_vectors * 2 + i], reg_masks),
             )
-            if weight is not None:
-                loss = loss * weight[:, :, 0][reg_masks]
+            if self.prescale != 1.0:
+                loss = loss * self.prescale
+            if self.weights is not None:
+                loss = loss * torch.masked_select(weight, reg_masks)
             reg_losses.append(loss.sum() / batch_size)
 
         return reg_losses
 
-    def _scale_losses(self, x_scales, t_scales, *, weight=None):
+    def _scale_losses(self, x_scales, t_scales):
         assert x_scales.shape[2] == t_scales.shape[2] == len(self.scale_losses)
 
         batch_size = x_scales.shape[0]
         losses = []
+        if self.weights is not None:
+            weight = torch.ones_like(t_scales[:, :, 0], requires_grad=False)
+            weight[:] = self.weights
         for i, sl in enumerate(self.scale_losses):
             mask = torch.isnan(t_scales[:, :, i]).bitwise_not_()
             loss = sl(
                 torch.masked_select(x_scales[:, :, i], mask),
                 torch.masked_select(t_scales[:, :, i], mask),
             )
-            if weight is not None:
-                loss = loss * weight[:, :, 0][mask]
+            if self.prescale != 1.0:
+                loss = loss * self.prescale
+            if self.weights is not None:
+                loss = loss * torch.masked_select(weight, mask)
             losses.append(loss.sum() / batch_size)
 
         return losses

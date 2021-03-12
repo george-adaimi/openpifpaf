@@ -1,6 +1,7 @@
 """Train a pifpaf network."""
 
 import argparse
+import copy
 import datetime
 import logging
 import os
@@ -48,10 +49,21 @@ def cli():
     )
     parser.add_argument('--version', action='version',
                         version='OpenPifPaf {version}'.format(version=__version__))
+    parser.add_argument('-o', '--output', default=None,
+                        help='output file')
+    parser.add_argument('--disable-cuda', action='store_true',
+                        help='disable CUDA')
+    parser.add_argument('--ddp', default=False, action='store_true',
+                        help='[experimental] DistributedDataParallel')
+    parser.add_argument('--local_rank', default=None, type=int,
+                        help='[experimental] for torch.distributed.launch')
+    parser.add_argument('--no-sync-batchnorm', dest='sync_batchnorm',
+                        default=True, action='store_false',
+                        help='[experimental] in ddp, to not use syncbatchnorm')
 
     logger.cli(parser)
-    network.cli(parser)
-    network.losses.cli(parser)
+    network.Factory.cli(parser)
+    network.losses.Factory.cli(parser)
     network.Trainer.cli(parser)
     encoder.cli(parser)
     optimize.cli(parser)
@@ -59,12 +71,35 @@ def cli():
     show.cli(parser)
     visualizer.cli(parser)
 
-    parser.add_argument('-o', '--output', default=None,
-                        help='output file')
-    parser.add_argument('--disable-cuda', action='store_true',
-                        help='disable CUDA')
-
     args = parser.parse_args()
+
+    logger.configure(args, LOG)
+    if args.log_stats:
+        logging.getLogger('openpifpaf.stats').setLevel(logging.DEBUG)
+
+    # DDP with SLURM
+    slurm_process_id = os.environ.get('SLURM_PROCID')
+    if args.ddp and slurm_process_id is not None:
+        if torch.cuda.device_count() > 1:
+            LOG.warning('Expected one GPU per SLURM task but found %d. '
+                        'Try with "srun --gpu-bind=closest ...". Still trying.',
+                        torch.cuda.device_count())
+
+        # if there is more than one GPU available, assume that other SLURM tasks
+        # have access to the same GPUs and assign GPUs uniquely by slurm_process_id
+        args.local_rank = (int(slurm_process_id) % torch.cuda.device_count()
+                           if torch.cuda.device_count() > 0 else 0)
+
+        os.environ['RANK'] = slurm_process_id
+        if not os.environ.get('WORLD_SIZE') and os.environ.get('SLURM_NTASKS'):
+            os.environ['WORLD_SIZE'] = os.environ.get('SLURM_NTASKS')
+
+        LOG.info('found SLURM process id: %s', slurm_process_id)
+        LOG.info('distributed env: master=%s port=%s rank=%s world=%s, '
+                 'local rank (GPU)=%d',
+                 os.environ.get('MASTER_ADDR'), os.environ.get('MASTER_PORT'),
+                 os.environ.get('RANK'), os.environ.get('WORLD_SIZE'),
+                 args.local_rank)
 
     # add args.device
     args.device = torch.device('cpu')
@@ -72,19 +107,16 @@ def cli():
     if not args.disable_cuda and torch.cuda.is_available():
         args.device = torch.device('cuda')
         args.pin_memory = True
-    LOG.debug('neural network device: %s', args.device)
+    LOG.info('neural network device: %s (CUDA available: %s, count: %d)',
+             args.device, torch.cuda.is_available(), torch.cuda.device_count())
 
     # output
     if args.output is None:
         args.output = default_output_file(args)
         os.makedirs('outputs', exist_ok=True)
 
-    logger.train_configure(args, LOG)
-    if args.log_stats:
-        logging.getLogger('openpifpaf.stats').setLevel(logging.DEBUG)
-
-    network.configure(args)
-    network.losses.configure(args)
+    network.Factory.configure(args)
+    network.losses.Factory.configure(args)
     network.Trainer.configure(args)
     encoder.configure(args)
     datasets.configure(args)
@@ -99,21 +131,57 @@ def main():
 
     datamodule = datasets.factory(args.dataset)
 
-    net_cpu, start_epoch = network.factory_from_args(args, head_metas=datamodule.head_metas)
-    net = net_cpu.to(device=args.device)
-    if not args.disable_cuda and torch.cuda.device_count() > 1:
-        print('Using multiple GPUs: {}'.format(torch.cuda.device_count()))
-        net = torch.nn.DataParallel(net)
+    net_cpu, start_epoch = network.Factory().factory(head_metas=datamodule.head_metas)
+    loss = network.losses.Factory().factory(net_cpu.head_nets)
 
-    loss = network.losses.factory_from_args(args, net_cpu.head_nets)
+    checkpoint_shell = None
+    if not args.disable_cuda and torch.cuda.device_count() > 1 and not args.ddp:
+        LOG.info('Multiple GPUs with DataParallel: %d', torch.cuda.device_count())
+        checkpoint_shell = copy.deepcopy(net_cpu)
+        net = torch.nn.DataParallel(net_cpu.to(device=args.device))
+        loss = loss.to(device=args.device)
+    elif not args.disable_cuda and torch.cuda.device_count() == 1 and not args.ddp:
+        LOG.info('Single GPU training')
+        checkpoint_shell = copy.deepcopy(net_cpu)
+        net = net_cpu.to(device=args.device)
+        loss = loss.to(device=args.device)
+    elif not args.disable_cuda and torch.cuda.device_count() > 0:
+        LOG.info('Multiple GPUs with DistributedDataParallel')
+        assert not list(loss.parameters())
+        assert torch.cuda.device_count() > 0
+        checkpoint_shell = copy.deepcopy(net_cpu)
+        torch.cuda.set_device(args.local_rank)
+        torch.distributed.init_process_group(backend='nccl', init_method='env://')
+        LOG.info('DDP: rank %d, world %d',
+                 torch.distributed.get_rank(), torch.distributed.get_world_size())
+        if args.sync_batchnorm:
+            LOG.info('convert all batchnorms to syncbatchnorms')
+            net_cpu = torch.nn.SyncBatchNorm.convert_sync_batchnorm(net_cpu)
+        else:
+            LOG.info('not converting batchnorms to syncbatchnorms')
+        net = torch.nn.parallel.DistributedDataParallel(
+            net_cpu.to(device=args.device),
+            device_ids=[args.local_rank], output_device=args.local_rank,
+            find_unused_parameters=isinstance(datamodule, datasets.MultiDataModule),
+        )
+        loss = loss.to(device=args.device)
+    else:
+        net = net_cpu
+
+    logger.train_configure(args)
     train_loader = datamodule.train_loader()
     val_loader = datamodule.val_loader()
+    if torch.distributed.is_initialized():
+        train_loader = datamodule.distributed_sampler(train_loader)
+        val_loader = datamodule.distributed_sampler(val_loader)
 
     optimizer = optimize.factory_optimizer(
         args, list(net.parameters()) + list(loss.parameters()))
-    lr_scheduler = optimize.factory_lrscheduler(args, optimizer, len(train_loader))
+    lr_scheduler = optimize.factory_lrscheduler(
+        args, optimizer, len(train_loader), last_epoch=start_epoch)
     trainer = network.Trainer(
         net, loss, optimizer, args.output,
+        checkpoint_shell=checkpoint_shell,
         lr_scheduler=lr_scheduler,
         device=args.device,
         model_meta_data={

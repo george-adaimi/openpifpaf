@@ -21,6 +21,8 @@ class Base:
 
     @property
     def stride(self) -> int:
+        if self.base_stride is None:
+            return None
         return self.base_stride // self.upsample_stride
 
     @property
@@ -30,9 +32,11 @@ class Base:
 
 @dataclass
 class Cif(Base):
+    """Head meta data for a Composite Intensity Field (CIF)."""
+
     keypoints: List[str]
     sigmas: List[float]
-    pose: Any
+    pose: Any = None
     draw_skeleton: List[Tuple[int, int]] = None
     score_weights: List[float] = None
 
@@ -44,6 +48,8 @@ class Cif(Base):
     decoder_min_scale = 0.0
     decoder_seed_mask: List[int] = None
 
+    training_weights: List[float] = None
+
     @property
     def n_fields(self):
         return len(self.keypoints)
@@ -51,10 +57,12 @@ class Cif(Base):
 
 @dataclass
 class Caf(Base):
+    """Head meta data for a Composite Association Field (CAF)."""
+
     keypoints: List[str]
     sigmas: List[float]
-    pose: Any
     skeleton: List[Tuple[int, int]]
+    pose: Any = None
     sparse_skeleton: List[Tuple[int, int]] = None
     dense_to_sparse_radius: float = 2.0
     only_in_field_of_view: bool = False
@@ -67,6 +75,8 @@ class Caf(Base):
     decoder_min_distance = 0.0
     decoder_max_distance = float('inf')
     decoder_confidence_scales: List[float] = None
+
+    training_weights: List[float] = None
 
     @property
     def n_fields(self):
@@ -101,6 +111,8 @@ class Caf(Base):
 
 @dataclass
 class CifDet(Base):
+    """Head meta data for a Composite Intensity Field (CIF) for Detection."""
+
     categories: List[str]
 
     n_confidences: ClassVar[int] = 1
@@ -109,6 +121,8 @@ class CifDet(Base):
 
     vector_offsets = [True, False]
     decoder_min_scale = 0.0
+
+    training_weights: List[float] = None
 
     @property
     def n_fields(self):

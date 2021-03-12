@@ -13,8 +13,13 @@
   - file: train
   - file: cli_help
   - file: plugins_overview
-  - file: plugins_cifar10
   - file: faq
+
+- part: Tutorials
+  chapters:
+  - file: plugins_crowdpose
+  - file: tutorial_opencv
+  - file: plugins_cifar10
 
 - part: Reference
   chapters:
@@ -23,8 +28,6 @@
 - part: Development
   chapters:
   - file: dev
-  - file: profile
-  - title: History
-    url: https://github.com/vita-epfl/openpifpaf/blob/master/HISTORY.md
+  - file: performance
   - title: GitHub
     url: https://github.com/vita-epfl/openpifpaf

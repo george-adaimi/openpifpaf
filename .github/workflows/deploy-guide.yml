@@ -19,16 +19,29 @@ jobs:
       with:
         fetch-depth: 0
 
-    # Install dependencies
+    - name: Cache checkpoints and data
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cache
+          data-cifar10
+        key: ${{ runner.os }}-${{ hashFiles('setup.py') }}
+
     - name: Set up Python 3.7
       uses: actions/setup-python@v1
       with:
         python-version: 3.7
 
+    - name: Install PyTorch without CUDA
+      run: pip install torch==1.7.1+cpu torchvision==0.8.2+cpu -f https://download.pytorch.org/whl/torch_stable.html
+
     - name: Install dependencies
       run: |
         pip install .[dev,test]
         sudo apt install jq
+
+    - name: Custom theme with on-this-page
+      run: pip install --upgrade https://github.com/svenkreiss/sphinx-book-theme/archive/onthispage.zip
 
     # make sure KernelSpec in all notebooks is python3
     - name: Normalize KernelSpec
@@ -42,6 +55,9 @@ jobs:
     - name: Build the artwork for guide
       run: cd guide && python artwork.py
 
+    - name: Download data
+      run: cd guide && python download_data.py
+
     - name: Build the guide
       run: cd guide && jupyter-book build .
 
@@ -51,3 +67,4 @@ jobs:
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./guide/_build/html
+        force_orphan: true

@@ -6,7 +6,6 @@ import hashlib
 import logging
 import shutil
 import time
-import warnings
 
 import torch
 
@@ -19,6 +18,7 @@ class Trainer():
     n_val_batches = None
 
     clip_grad_norm = 0.0
+    clip_grad_value = 0.0
     log_interval = 11
     val_interval = 1
 
@@ -26,8 +26,10 @@ class Trainer():
     stride_apply = 1
     ema_decay = 0.01
     train_profile = None
+    distributed_reduce_loss = True
 
     def __init__(self, model, loss, optimizer, out, *,
+                 checkpoint_shell=None,
                  lr_scheduler=None,
                  device=None,
                  model_meta_data=None):
@@ -35,6 +37,7 @@ class Trainer():
         self.loss = loss
         self.optimizer = optimizer
         self.out = out
+        self.checkpoint_shell = checkpoint_shell
         self.lr_scheduler = lr_scheduler
         self.device = device
         self.model_meta_data = model_meta_data
@@ -80,6 +83,8 @@ class Trainer():
 
         group.add_argument('--clip-grad-norm', default=cls.clip_grad_norm, type=float,
                            help='clip grad norm: specify largest change for single param')
+        group.add_argument('--clip-grad-value', default=cls.clip_grad_value, type=float,
+                           help='clip grad value: specify largest change for single param')
         group.add_argument('--log-interval', default=cls.log_interval, type=int,
                            help='log loss every n steps')
         group.add_argument('--val-interval', default=cls.val_interval, type=int,
@@ -103,6 +108,7 @@ class Trainer():
         cls.n_val_batches = args.val_batches
 
         cls.clip_grad_norm = args.clip_grad_norm
+        cls.clip_grad_value = args.clip_grad_value
         cls.log_interval = args.log_interval
         cls.val_interval = args.val_interval
 
@@ -141,20 +147,24 @@ class Trainer():
             p.data.copy_(ema_p)
         self.ema_restore_params = None
 
-    def loop(self, train_scenes, val_scenes, start_epoch=0):
+    def loop(self,
+             train_scenes: torch.utils.data.DataLoader,
+             val_scenes: torch.utils.data.DataLoader,
+             start_epoch=0):
         if start_epoch >= self.epochs:
             raise Exception('start epoch ({}) >= total epochs ({})'
                             ''.format(start_epoch, self.epochs))
 
         if self.lr_scheduler is not None:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                for _ in range(start_epoch * len(train_scenes)):
-                    self.lr_scheduler.step()
+            assert self.lr_scheduler.last_epoch == start_epoch * len(train_scenes)
 
         for epoch in range(start_epoch, self.epochs):
             if epoch == 0:
                 self.write_model(0, final=False)
+            if hasattr(train_scenes.sampler, 'set_epoch'):
+                train_scenes.sampler.set_epoch(epoch)
+            if hasattr(val_scenes.sampler, 'set_epoch'):
+                val_scenes.sampler.set_epoch(epoch)
 
             self.train(train_scenes, epoch)
 
@@ -172,7 +182,7 @@ class Trainer():
 
         # train encoder
         with torch.autograd.profiler.record_function('model'):
-            outputs = self.model(data)
+            outputs = self.model(data, [t is not None for t in targets])
         with torch.autograd.profiler.record_function('loss'):
             loss, head_losses = self.loss(outputs, targets)
         if loss is not None:
@@ -187,6 +197,8 @@ class Trainer():
                 self.n_clipped_grad += 1
                 print('CLIPPED GRAD NORM: total norm before clip: {}, max norm: {}'
                       ''.format(total_norm, max_norm))
+        if self.clip_grad_value:
+            torch.nn.utils.clip_grad_value_(self.model.parameters(), self.clip_grad_value)
         if apply_gradients:
             with torch.autograd.profiler.record_function('step'):
                 self.optimizer.step()
@@ -194,11 +206,33 @@ class Trainer():
             with torch.autograd.profiler.record_function('ema'):
                 self.step_ema()
 
+        with torch.no_grad():
+            loss = self.reduce_loss(loss)
+            head_losses = self.reduce_loss(head_losses)
+
         return (
             float(loss.item()) if loss is not None else None,
             [float(l.item()) if l is not None else None
              for l in head_losses],
         )
+
+    @classmethod
+    def reduce_loss(cls, loss):
+        if not cls.distributed_reduce_loss:
+            return loss
+        if loss is None:
+            return loss
+        if not torch.distributed.is_initialized():
+            return loss
+
+        if isinstance(loss, (list, tuple)):
+            return [cls.reduce_loss(l) for l in loss]
+
+        # average loss from all processes
+        torch.distributed.reduce(loss, 0)
+        if torch.distributed.get_rank() == 0:
+            loss = loss / torch.distributed.get_world_size()
+        return loss
 
     def val_batch(self, data, targets):
         if self.device:
@@ -210,6 +244,8 @@ class Trainer():
         with torch.no_grad():
             outputs = self.model(data)
             loss, head_losses = self.loss(outputs, targets)
+            loss = self.reduce_loss(loss)
+            head_losses = self.reduce_loss(head_losses)
 
         return (
             float(loss.item()) if loss is not None else None,
@@ -347,23 +383,23 @@ class Trainer():
         })
 
     def write_model(self, epoch, final=True):
-        self.model.cpu()
+        if torch.distributed.is_initialized() and torch.distributed.get_rank() != 0:
+            return
 
-        if isinstance(self.model, torch.nn.DataParallel):
-            LOG.debug('Writing a dataparallel model.')
-            model = self.model.module
-        else:
-            LOG.debug('Writing a single-thread model.')
-            model = self.model
+        model_to_save = self.model
+        if self.checkpoint_shell is not None:
+            model = self.model if not hasattr(self.model, 'module') else self.model.module
+            self.checkpoint_shell.load_state_dict(model.state_dict())
+            model_to_save = self.checkpoint_shell
 
         filename = '{}.epoch{:03d}'.format(self.out, epoch)
         LOG.debug('about to write model')
         torch.save({
-            'model': model,
+            'model': model_to_save,
             'epoch': epoch,
             'meta': self.model_meta_data,
         }, filename)
-        LOG.debug('model written')
+        LOG.info('model written: %s', filename)
 
         if final:
             sha256_hash = hashlib.sha256()
@@ -374,5 +410,3 @@ class Trainer():
             outname, _, outext = self.out.rpartition('.')
             final_filename = '{}-{}.{}'.format(outname, file_hash[:8], outext)
             shutil.copyfile(filename, final_filename)
-
-        self.model.to(self.device)
