@@ -30,6 +30,7 @@ class VGModule(openpifpaf.datasets.DataModule):
     no_flipping = False
     use_dcn = False
     supervise_offset = False
+    ignore_rel = False
 
     eval_long_edge = None
     eval_orientation_invariant = 0.0
@@ -42,6 +43,8 @@ class VGModule(openpifpaf.datasets.DataModule):
         if self.use_dcn or self.supervise_offset:
             raf = headmeta.Raf_dcn('raf', 'vg', self.obj_categories, self.rel_categories)
             raf.n_offsets = 2 if self.supervise_offset else 0
+            raf.ignore_rel = self.ignore_rel
+            raf.upsample_stride = self.upsample_stride
         else:
             raf = headmeta.Raf('raf', 'vg', self.obj_categories, self.rel_categories)
 
@@ -105,6 +108,10 @@ class VGModule(openpifpaf.datasets.DataModule):
                 dest='vg_supervise_offset',
                 default=False, action='store_true',
                 help='Supervise offset of deformable Conv in head')
+        group.add_argument('--vg-ignore-rel',
+                dest='vg_ignore_rel',
+                default=False, action='store_true',
+                help='ignore relationship everywhere')
 
     @classmethod
     def configure(cls, args: argparse.Namespace):
@@ -133,6 +140,7 @@ class VGModule(openpifpaf.datasets.DataModule):
 
         cls.use_dcn = args.vg_use_dcn
         cls.supervise_offset = args.vg_supervise_offset
+        cls.ignore_rel = args.vg_ignore_rel
 
     @staticmethod
     def _convert_data(parent_data, meta):

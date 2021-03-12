@@ -56,6 +56,8 @@ class Raf_dcn(headmeta.Base):
     n_vectors: ClassVar[int] = 2
     n_offsets: ClassVar[int] = 0
     n_scales: ClassVar[int] = 2
+    ignore_rel = False
+    upsample_stride = 1
 
     vector_offsets = [True, True]
     decoder_min_distance = 0.0

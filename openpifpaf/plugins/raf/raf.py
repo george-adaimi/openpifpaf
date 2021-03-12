@@ -62,11 +62,11 @@ class RafGenerator:
         #self.meta = meta
         width_height_original = image.shape[2:0:-1]
         detections = self.rescaler.relations(anns)
-        bg_mask, bg_mask_offset = self.rescaler.bg_mask(anns, width_height_original,
+        bg_mask, bg_mask_offset = self.rescaler.bg_mask(anns, width_height_original, self.config.meta,
                                         crowd_margin=(self.config.min_size - 1) / 2)
 
         valid_area = self.rescaler.valid_area(meta)
-        valid_area_offset = self.rescaler.valid_area_offset(meta)
+        valid_area_offset = self.rescaler.valid_area_offset(meta, self.config.meta)
         LOG.debug('valid area: %s', valid_area)
 
         self.init_fields(len(self.config.meta.rel_categories), bg_mask, bg_mask_offset)
@@ -84,7 +84,10 @@ class RafGenerator:
     def init_fields(self, n_fields, bg_mask, bg_mask_offset):
         field_w = bg_mask.shape[2] + 2 * self.config.padding
         field_h = bg_mask.shape[1] + 2 * self.config.padding
-        self.intensities = np.zeros((n_fields, field_h, field_w), dtype=np.float32)
+        if self.config.meta.ignore_rel:
+            self.intensities = np.full((n_fields, field_h, field_w), np.nan, dtype=np.float32)
+        else:
+            self.intensities = np.zeros((n_fields, field_h, field_w), dtype=np.float32)
         self.fields_reg1 = np.full((n_fields, 2, field_h, field_w), np.nan, dtype=np.float32)
         self.fields_reg2 = np.full((n_fields, 2, field_h, field_w), np.nan, dtype=np.float32)
         self.fields_bmin1 = np.full((n_fields, field_h, field_w), np.nan, dtype=np.float32)
@@ -169,8 +172,8 @@ class RafGenerator:
         #scale2 = np.min([scale2, np.min(max_r2) * 0.25])
         self.fill_association(predicate, joint1, joint2, scale1, scale2, max_r1, max_r2)
         if self.config.offset:
-            joint1 = subject_det[:2]/2 + 0.5 * (subject_det[2:]/2)
-            joint2 = object_det[:2]/2 + 0.5 * (object_det[2:]/2)
+            joint1 = subject_det[:2]/float(self.config.meta.upsample_stride) + 0.5 * (subject_det[2:]/float(self.config.meta.upsample_stride))
+            joint2 = object_det[:2]/float(self.config.meta.upsample_stride)  + 0.5 * (object_det[2:]/float(self.config.meta.upsample_stride))
             self.fill_offsets(predicate, joint1, joint2)
 
 
@@ -297,9 +300,18 @@ class RafGenerator:
             self.fields_reg_l[paf_i, fminy:fmaxy, fminx:fmaxx][mask] = sink_l[mask]
 
             # update intensity
-            # if self.ignore_rel:
-            #     self.intensities[self.intensities[:, fminy:fmaxy, fminx:fmaxx] == np.nan] = 0.0
-            #     self.intensities[self.intensities[:, fminy:fmaxy, fminx:fmaxx] == np.nan] = 0.0
+            if self.config.meta.ignore_rel:
+                mask_expanded = np.tile(np.expand_dims(mask,0), (self.intensities.shape[0], 1, 1))
+                mask_ignore = np.isnan(self.intensities[:, fminy:fmaxy, fminx:fmaxx])
+                #if len(mask_ignore)>0:
+                #mask_ignore = mask_ignore
+                self.intensities[:, fminy:fmaxy, fminx:fmaxx][np.logical_and(mask_expanded,mask_ignore)] = 0.0
+
+                mask_peak_expanded = np.tile(np.expand_dims(mask_peak,0), (self.intensities.shape[0], 1, 1))
+                #mask_ignore = np.isnan(self.intensities[:, fminy:fmaxy, fminx:fmaxx])
+                #if len(mask_ignore)>0:
+                #mask_ignore = mask_ignore.reshape(mask_peak_expanded.shape)
+                self.intensities[:, fminy:fmaxy, fminx:fmaxx][np.logical_and(mask_peak_expanded, mask_ignore)] = 0.0
 
             self.intensities[paf_i, fminy:fmaxy, fminx:fmaxx][mask] = 1.0
             self.intensities[paf_i, fminy:fmaxy, fminx:fmaxx][mask_peak] = 1.0

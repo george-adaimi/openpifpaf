@@ -265,7 +265,13 @@ class RafGenerator(RelationshipFiller):
     def init_fields(self, bg_mask):
         reg_field_shape = (self.field_shape[0], 2, self.field_shape[1], self.field_shape[2])
 
-        self.intensities = np.zeros(self.field_shape, dtype=np.float32)
+
+        if self.config.ignore_rel:
+            import pdb; pdb.set_trace()
+            self.intensities = np.full(self.field_shape, np.nan, dtype=np.float32)
+        else:
+            self.intensities = np.zeros(self.field_shape, dtype=np.float32)
+
         self.fields_reg1 = np.full(reg_field_shape, np.nan, dtype=np.float32)
         self.fields_reg2 = np.full(reg_field_shape, np.nan, dtype=np.float32)
         self.fields_bmin1 = np.full(self.field_shape, np.nan, dtype=np.float32)
@@ -412,9 +418,9 @@ class RafGenerator(RelationshipFiller):
             self.fields_reg_l[paf_i, fminy:fmaxy, fminx:fmaxx][mask] = sink_l[mask]
 
             # update intensity
-            # if self.ignore_rel:
-            #     self.intensities[self.intensities[:, fminy:fmaxy, fminx:fmaxx] == np.nan] = 0.0
-            #     self.intensities[self.intensities[:, fminy:fmaxy, fminx:fmaxx] == np.nan] = 0.0
+            if self.config.ignore_rel:
+                self.intensities[self.intensities[:, fminy:fmaxy, fminx:fmaxx] == np.nan][mask] = 0.0
+                self.intensities[self.intensities[:, fminy:fmaxy, fminx:fmaxx] == np.nan][mask_peak] = 0.0
 
             self.intensities[paf_i, fminy:fmaxy, fminx:fmaxx][mask] = 1.0
             self.intensities[paf_i, fminy:fmaxy, fminx:fmaxx][mask_peak] = 1.0

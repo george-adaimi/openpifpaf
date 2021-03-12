@@ -25,7 +25,7 @@ def mask_valid_area_offset(intensities, valid_area, *, fill_value=0):
         intensities[:, max_j:] = fill_value
 
 class AnnRescalerRel(AnnRescalerDet):
-    def bg_mask(self, anns, width_height, *, crowd_margin):
+    def bg_mask(self, anns, width_height, config, *, crowd_margin):
         """Create background mask taking crowd annotations into account."""
         # mask = np.ones((
         #     self.n_categories,
@@ -47,8 +47,8 @@ class AnnRescalerRel(AnnRescalerDet):
 
         mask_offset = np.ones((
             self.n_categories,
-            (width_height[1]-1) // (self.stride*2)+1,
-            (width_height[0]-1) // (self.stride*2)+1,
+            (width_height[1]-1) // (self.stride*config.upsample_stride)+1,
+            (width_height[0]-1) // (self.stride*config.upsample_stride)+1,
         ), dtype=np.bool)
 
         return mask, mask_offset
@@ -66,13 +66,13 @@ class AnnRescalerRel(AnnRescalerDet):
         #category_bboxes = [(ann['category_id'], ann['bbox'] / self.stride, dict_temp[ann['object_index']], ann['predicate'])
         #                   for k, ann in dict_temp.items() if (ann['object_index'] in dict_temp and (not (ann['iscrowd'] or dict_temp[ann['object_index']]['iscrowd'])))]
         return dict_temp
-    def valid_area_offset(self, meta):
+    def valid_area_offset(self, meta, config):
         if 'valid_area' not in meta:
             return None
 
         return (
-            meta['valid_area'][0] / (self.stride*2),
-            meta['valid_area'][1] / (self.stride*2),
-            meta['valid_area'][2] / (self.stride*2),
-            meta['valid_area'][3] / (self.stride*2),
+            meta['valid_area'][0] / (self.stride*config.upsample_stride),
+            meta['valid_area'][1] / (self.stride*config.upsample_stride),
+            meta['valid_area'][2] / (self.stride*config.upsample_stride),
+            meta['valid_area'][3] / (self.stride*config.upsample_stride),
         )
